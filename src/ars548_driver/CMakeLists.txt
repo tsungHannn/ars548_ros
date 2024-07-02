@@ -7,6 +7,7 @@ endif()
 
 find_package(catkin REQUIRED
   roscpp
+  rospy
   ars548_messages
   sensor_msgs
   geometry_msgs

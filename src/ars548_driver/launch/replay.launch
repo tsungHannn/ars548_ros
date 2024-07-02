@@ -1,0 +1,27 @@
+<launch>
+
+    <node
+        pkg="image_transport"
+        type="republish"
+        name="image_decompress"
+        output="screen"
+        args="compressed in:=/aravis_cam/image_color raw out:=/aravis_cam/image_color_row"
+    />
+
+    <node
+        pkg="ars548_driver"
+        type="optimizer.py"
+        name="optimizer"
+        output="screen"
+    />
+
+
+    <!-- 啟動rviz節點 -->
+    <node 
+        pkg="rviz" 
+        type="rviz" 
+        name="Visualization" 
+        args="-d $(find ars548_driver)/rviz/replay.rviz"
+    />
+
+</launch>
