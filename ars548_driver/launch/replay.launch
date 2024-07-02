@@ -1,0 +1,11 @@
+<launch>
+
+    <!-- 啟動rviz節點 -->
+    <node 
+        pkg="rviz" 
+        type="rviz" 
+        name="Visualization" 
+        args="-d $(find ars548_driver)/rviz/replay.rviz"
+    />
+
+</launch>

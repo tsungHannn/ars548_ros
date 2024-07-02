@@ -1,0 +1,102 @@
+<launch>
+    <!-- 定義參數 -->
+    <arg name="frameID_Radar" default="ARS_548"/>
+    <arg name="radarIP" default="224.0.2.2"/>
+    <arg name="radarPort" default="42102"/>
+
+    <!-- 啟動ars548_driver節點 -->
+    
+    <!-- <node pkg="ars548_driver" type="ars548_driver_node" name="radar" output="screen">
+        <param name="radarIP" value="$(arg radarIP)"/>
+        <param name="radarPort" value="$(arg radarPort)"/>
+        <param name="frameID_Radar" value="$(arg frameID_Radar)"/>
+    </node> -->
+    <node 
+        pkg="ars548_driver" 
+        type="ars548_driver_node" 
+        name="radar" 
+        output="screen"
+        args="224.0.2.2 ARS_548 42102"
+    />
+    <!-- 啟動rviz節點 -->
+    <node 
+        pkg="rviz" 
+        type="rviz" 
+        name="Visualization" 
+        args="-d $(find ars548_driver)/rviz/myRadarVisualization.rviz"
+    />
+
+    <node pkg="tf2_ros" type="static_transform_publisher" output="screen" name="tf" args="0 0 0 0 0 0 PointCloud ARS_548"/>
+
+
+  <!-- Camera Node-->
+    <arg name="load_manager"             default="true"/>
+    <arg name="manager_name"             default="camera_manager"/>
+    <arg name="manager"                  value="/$(arg manager_name)"/>
+    <arg name="manager_threads"          default="4"/>
+
+    <arg name="sensor_name"              default="aravis_cam"/>
+    <arg name="serial_no"                default=""/>
+    <arg name="camera_info_url"          default=""/>
+
+    <arg name="pixel_format"             default="BayerRG8"/>
+    <arg name="width"                    default="2048"/>
+    <arg name="height"                   default="1536"/>
+    <arg name="fps"                      default="25"/>
+
+    <arg name="verbose"                  default="false"/>
+
+    <!-- Nodelet Manager -->
+    <node if="$(arg load_manager)" pkg="nodelet" type="nodelet" name="$(arg manager_name)" required="true" args="manager" output="screen">
+      <param name="num_worker_threads" value="$(arg manager_threads)" />
+    </node>
+
+    <group ns="$(arg sensor_name)">
+
+      <!-- Aravis RGB camera nodelet -->
+      <node pkg="nodelet" type="nodelet" name="$(arg sensor_name)" args="standalone camera_aravis/CameraAravisNodelet" output="screen">
+
+        <param name="guid"                 value="$(arg serial_no)"/>
+        <param name="camera_info_url"      value="$(arg camera_info_url)"/>
+        <param name="frame_id"             value="$(arg sensor_name)"/>
+
+        <param name="diagnostic_yaml_url"	 value="camera_diagnostics.yaml"/>
+
+        <!-- use GenICam SFNC names as stream control parameters -->
+        <param name="PixelFormat"          value="$(arg pixel_format)"/>
+        <param name="Width"                value="$(arg width)"/>
+        <param name="Height"               value="$(arg height)"/>
+        <param name="AcquisitionFrameRate" type="double" value="$(arg fps)"/>
+
+        <param name="Gamma"                value="0.41"/>
+        <param name="Gain"                 value="0.0"/>
+        <param name="AutoFunctionsROIPreset" value="AutoFunctionsROIPreset_Full"/>
+        <param name="ExposureAuto"         value="Continuous"/>
+        <param name="GainAuto"             value="Continuous"/>
+      
+        <!-- BalanceWhiteAuto Modes: Continuous, Once, Off -->
+        <param name="BalanceWhiteAuto"            value="Off"/>
+        <param name="wb_ratio_selector_feature"	  value="BalanceRatioSelector"/>
+        <param name="wb_ratio_selectors"	        value="Red,Blue"/>
+        <param name="wb_ratio_feature"	  	      value="BalanceRatio"/>
+        <param name="wb_ratios"	  	  	          value="1.4,2.5"/>
+
+        <param name="use_ptp_timestamp"           value="true"/>
+        <!-- <param name="ptp_enable_feature_name"     value="PtpEnable"/>
+        <param name="ptp_status_feature_name"     value="PtpStatus"/> -->
+        <param name="ptp_set_cmd_feature_name"    value="PtpDataSetLatch"/>
+        <param name="PtpOperationMode"		        value="Slave"/>
+        <param name="mtu"		        value="9000"/>
+
+      </node>
+
+      <node pkg="image_proc" type="image_proc" name="debayer" output="screen" args="image_raw:=/aravis_cam/aravis_cam/image_raw" />
+
+      <!-- Debayer the image -->
+      <!-- <node pkg="nodelet" type="nodelet" name="debayer"
+          args="load image_proc/debayer $(arg manager)">
+        <param name="debayer" value="1"/>
+      </node> -->
+
+    </group>
+</launch>

@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>ars548_messages</name>
+  <version>0.0.0</version>
+  <description>TODO: Package description</description>
+  <maintainer email="fernando@todo.todo">fernando</maintainer>
+  <license>TODO: License declaration</license>
+  
+  <!-- 依赖项 -->
+  <buildtool_depend>catkin</buildtool_depend>
+  <build_depend>message_generation</build_depend>
+  <build_depend>std_msgs</build_depend>
+  
+  <exec_depend>message_runtime</exec_depend>
+  <exec_depend>std_msgs</exec_depend>
+  
+  <!-- 测试依赖项 -->
+  <test_depend>roslint</test_depend>
+
+  <!-- 导出信息 -->
+  <export>
+  </export>
+</package>
