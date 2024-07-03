@@ -1,0 +1,36 @@
+<launch>
+    
+    <node
+        pkg="image_transport"
+        type="republish"
+        name="image_decompress"
+        output="screen"
+        args="compressed in:=/aravis_cam/image_color raw out:=/aravis_cam/image_color"
+    />
+    
+    <!-- <node
+        pkg="ars408_ros"
+        type="rgb_radar_fusion.py"
+        name="rgb_radar_fusion"
+        output="screen"
+    /> -->
+    
+    <node
+        pkg="ars548_driver"
+        type="optimizer.py"
+        name="optimizer"
+        output="screen"
+    />
+
+    <!--
+    <include file="$(find pointgrey_camera_driver)/launch/camera.launch"/>
+    <include file="$(find dv_ros_visualization)/launch/event_visualization.launch"/>
+    -->
+
+    <node
+        pkg="rviz"
+        type="rviz"
+        name="rv"
+        args="-d $(find ars548_driver)/rviz/record.rviz"
+    />
+</launch>

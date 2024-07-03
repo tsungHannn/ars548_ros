@@ -23,7 +23,7 @@
         pkg="rviz" 
         type="rviz" 
         name="Visualization" 
-        args="-d $(find ars548_driver)/rviz/myRadarVisualization.rviz"
+        args="-d $(find ars548_driver)/rviz/record.rviz"
     />
 
     <node pkg="tf2_ros" type="static_transform_publisher" output="screen" name="tf" args="0 0 0 0 0 0 PointCloud ARS_548"/>
