@@ -35,8 +35,44 @@ r = [[0.48138013257574797, 0.8740446835791055, 0.06571954860204904],\
 [0.8269173531350938, -0.4280011987534289, -0.36472272337993766]]\
 t = [0.0, 0.0, 388232.0443589092]
 
+## Rosbag 轉出 pcd 跟 png
+- Tools_RosBag2KITTI: https://github.com/leofansq/Tools_RosBag2KITTI
+在 ROS 環境中
+```bash
+cd catkin_ws
+catkin_make
+```
+Decode ROSBAG to .png and .pcd, the results are saved in output.
+```bash
+# 1st terminal for ROS core
+roscore
+# 2nd terminal for decoding node
+./devel/lib/obstacle_detection/map_generate
+# 3rd terminal for ROSBAG playing, 0.1 means 0.1 times speed
+rosbag play xxx.bag -r 0.1
+```
+> The actual play speed of ROSBAG is determined by the IO performance. Please adjust the speed to ensure the timestamps are within +/- 50 ms.
 
+## Annotation
+- SUSTechPOINTS: https://github.com/naurril/SUSTechPOINTS
+```bash
+cd Docker
+# Build docker image (构建镜像)
 
+sudo docker build -t sustechpoints:v1.0.0 .
+
+# Create container of server ,Please replace ${YourDataPath} with the path where you put data on (创建容器, 请将用你的数据存储路径将变量${YourDataPath}替换, 注意数据要符合data/example中的组织方式)
+
+sudo docker run -it -d --restart=always --name STPointsSServer -p 8081:8081 -v ${YourDataPath}:/root/SUSTechPOINTS/data sustechpoints:v1.0.0 bash
+
+```
+然後網頁打開 [localhost:8081](http://localhost:8081/)\
+docker可以 attach 來看
+```bash
+docker attach ${Container_name}
+```
+\
+\
 ARS_548_RDI Driver
 ================
 Introduction
