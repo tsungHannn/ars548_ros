@@ -8,11 +8,16 @@ import rospy
 import numpy as np
 import message_filters
 from numpy.polynomial import polyutils as pu
-from std_msgs.msg import String
-from sensor_msgs.msg import Image
+from std_msgs.msg import String, Header, ColorRGBA
+from sensor_msgs.msg import Image, PointCloud2, PointField
+import sensor_msgs.point_cloud2 as pc2
 from cv_bridge import CvBridge
 # from ars408_msg.msg import RadarPoints
 from ars548_messages.msg import ObjectList
+
+# Visualize radar information
+from visualization_msgs.msg import MarkerArray, Marker
+from geometry_msgs.msg import Pose, Point, Vector3, Quaternion
 
 from ppdeploy.pipeline.datacollector import DataCollector, Result
 from ppdeploy.pipeline.pipe_utils import parse_mot_res
@@ -107,10 +112,13 @@ class PaddleDetector():
             self.sub_radar = message_filters.Subscriber('/radar/object_list', ObjectList)
             self.sync = message_filters.ApproximateTimeSynchronizer([self.sub_image, self.sub_radar], 10, 10, reset=True, allow_headerless=True)
             self.only_image = rospy.Subscriber('/aravis_cam/image_color', Image, self.imageCallback)
-            self.only_radar = rospy.Subscriber('/radar/object_list', Image, self.radarCallback)
+            self.only_radar = rospy.Subscriber('/radar/point_cloud_object', PointCloud2, self.radarCallback)
+            self.radar_objectlist = rospy.Subscriber('/radar/object_list', ObjectList, self.objectListCallback)
+            
             self.sync.registerCallback(self.callback)
             
-        
+        self.pub_radar_filter = rospy.Publisher('/radar_filter', PointCloud2, queue_size=10)
+        self.pub_radar_marker = rospy.Publisher('/radar_marker', MarkerArray, queue_size=1)
         self.pub_mot = rospy.Publisher('/mot_image', Image, queue_size=10)
         self.pub_stats = rospy.Publisher('/traffic_stats', String, queue_size=10)
         if self.display_radar_image:
@@ -304,9 +312,87 @@ class PaddleDetector():
         return point_x, point_y
 
     def imageCallback(self, image_msg):
-        print(image_msg.header.stamp)
-    def radarCallback(self, radar_msg):
-        print(radar_msg.timestamp_seconds, radar_msg.timestamp_nanoseconds)
+        pass
+        # print(image_msg.header.stamp)
+    def radarCallback(self, objects):
+        filtered_points = []
+        # Iterate through the points in the PointCloud2 message
+        for point in pc2.read_points(objects, field_names=("x", "y", "z", "vx", "vy"), skip_nans=True):
+            x, y, z, vx, vy = point
+            if (vx**2 + vy**2)**0.5 > 1:
+                filtered_points.append([x, y, z, vx, vy])
+        header = Header()
+        header.stamp = rospy.Time.now()
+        header.frame_id = objects.header.frame_id
+        fields = [
+            PointField('x', 0, PointField.FLOAT32, 1),
+            PointField('y', 4, PointField.FLOAT32, 1),
+            PointField('z', 8, PointField.FLOAT32, 1),
+            PointField('vx', 12, PointField.FLOAT32, 1),
+            PointField('vy', 16, PointField.FLOAT32, 1)
+        ]
+
+        filtered_cloud = pc2.create_cloud(header, fields, filtered_points)
+
+        self.pub_radar_filter.publish(filtered_cloud)
+
+
+        # print(radar_msg.timestamp_seconds, radar_msg.timestamp_nanoseconds)
+    
+    def objectListCallback(self, radarObjectList):
+        markers = MarkerArray()
+
+        # # clear previous markers
+        markers.markers.append(Marker(
+            header=Header(frame_id="base_link", stamp=rospy.Time.now()),
+            action=Marker.DELETEALL
+        ))
+
+
+        # # radar points
+        id = 0
+        for obj in radarObjectList.objectlist_objects:
+
+            speed = math.sqrt(pow(obj.f_dynamics_absvel_x, 2)+pow(obj.f_dynamics_absvel_y,2))
+            if speed < 1:
+                continue
+            # ===============================================================================
+            # marker = Marker(
+            #         header=Header(frame_id="ARS_548", stamp=rospy.Time.now()),
+            #         id=id,
+            #         ns="front_center",
+            #         type=Marker.CYLINDER,
+            #         action=Marker.ADD,
+            #         pose=Pose(
+            #             position=Point(x=obj.u_position_x, y=obj.u_position_y, z=obj.u_position_z),
+            #             orientation=Quaternion(x=0, y=0, z=1)
+            #         ),
+            #         scale=Vector3(x=1, y=1, z=1.5),
+            #         color=ColorRGBA(r=0.0, g=0.0, b=0.9, a=1.0)
+            #         )
+            # markers.markers.append(marker)
+            # dist = math.sqrt(pow(obj.distX, 2)+pow(obj.distY,2))
+            width = obj.u_shape_width_edge_mean
+            length = obj.u_shape_length_edge_mean
+            text_marker = Marker(
+                header=Header(frame_id="ARS_548", stamp=rospy.Time.now()),
+                id=id,
+                ns="front_center_text",
+                type=Marker.TEXT_VIEW_FACING,
+                action=Marker.ADD,
+                # text=f"id: {obj.u_id} cls: {obj.classT}\n{dist:.2f}m\n{speed*3.6:.2f}km/h\n{obj.vrelX:.2f} {obj.vrelY:.2f}",
+                text=f"id: {obj.u_id}\n WxL:{width:.2f}x{length:.2f}m\n{speed*3.6:.2f}km/h\n",
+                pose=Pose(
+                    position=Point(x=obj.u_position_x, y=obj.u_position_y, z=obj.u_position_z),
+                    orientation=Quaternion(x=0, y=0, z=1)
+                ),
+                scale=Vector3(x=2, y=2, z=2),
+                color=ColorRGBA(r=0.0, g=1.0, b=0.0, a=1.0),
+            )
+            markers.markers.append(text_marker)
+            id = id + 1
+        
+        self.pub_radar_marker.publish(markers)
 
     def callback(self, image_msg, radar_points):
         print("@"*10)
