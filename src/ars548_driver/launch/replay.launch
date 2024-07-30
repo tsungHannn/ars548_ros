@@ -22,12 +22,12 @@
         output="screen"
     />
 
-    <!-- <node
+    <node
         pkg="ars548_driver"
         type="detector.py"
         name="detector"
         output="screen"
-    /> -->
+    />
 
     <!-- 啟動rviz節點 -->
     <node 
