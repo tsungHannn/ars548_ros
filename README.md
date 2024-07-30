@@ -16,6 +16,8 @@ sudo ip route replace default via 10.13.1.1 dev radarConnection
 sudo ip route del default
 ```
 ## 試用 FusionCalib 的結果
+- https://github.com/RadarCameraFusionTeam-BUPT/FusionCalib \
+
 eps=100000000\
 R = [[ 0.59158081 -0.75655654 -0.27866529]\
  [-0.64528238 -0.65151045  0.39892955]\
@@ -36,7 +38,8 @@ r = [[0.48138013257574797, 0.8740446835791055, 0.06571954860204904],\
 t = [0.0, 0.0, 388232.0443589092]
 
 ## Rosbag 轉出 pcd 跟 png
-- Tools_RosBag2KITTI: https://github.com/leofansq/Tools_RosBag2KITTI
+- Tools_RosBag2KITTI: https://github.com/leofansq/Tools_RosBag2KITTI \
+
 在 ROS 環境中
 ```bash
 cd catkin_ws
@@ -54,7 +57,7 @@ rosbag play xxx.bag -r 0.1
 > The actual play speed of ROSBAG is determined by the IO performance. Please adjust the speed to ensure the timestamps are within +/- 50 ms.
 
 ## Annotation
-- SUSTechPOINTS: https://github.com/naurril/SUSTechPOINTS
+- SUSTechPOINTS: https://github.com/naurril/SUSTechPOINTS \
 ```bash
 cd Docker
 # Build docker image (构建镜像)
@@ -71,6 +74,16 @@ docker可以 attach 來看
 ```bash
 docker attach ${Container_name}
 ```
+
+## 相機雷達校正 Calibration
+- 目前是用 SensorsCalibration: https://github.com/PJLab-ADG/SensorsCalibration \
+
+因為我們是用4D雷達，點雲有xyz，所以要用lidar2camera，不能用radar2camera。\
+校正的時候盡量不要點到fx, fy。
+
+
+
+
 \
 \
 ARS_548_RDI Driver
