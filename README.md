@@ -82,9 +82,54 @@ docker attach ${Container_name}
 校正的時候盡量不要點到fx, fy。
 
 
+## BEVHeight
+因為要在ROS中用它，所以要重新建環境，不能用docker。\
+https://github.com/ADLab-AutoDrive/BEVHeight \
+a. Install pytorch(v1.9.0).\
+b. Install mmcv-full==1.4.0 mmdet==2.19.0 mmdet3d==0.18.1.\
+c. Install pypcd
+```bash
+git clone https://github.com/klintan/pypcd.git
+cd pypcd
+python setup.py install
+```
+d. Install requirements.
+```bash
+pip install -r requirements.txt
+```
+e. Install BEVHeight (gpu required).
+```bash
+python setup.py develop
+```
+其中b.那項，不能直接載，要build from source。
+- mmcv-full: https://github.com/open-mmlab/mmcv/tree/v1.4.0 \
+  選到tag v1.4.0
+  ```bash
+  git clone https://github.com/open-mmlab/mmcv.git
+  cd mmcv
+  git checkout v1.4.0
+  MMCV_WITH_OPS=1 pip install -e .
+  ```
+- mmdet: https://github.com/open-mmlab/mmdetection.git \
+  選到tag v2.19.0
+  ```bash
+  git clone https://github.com/open-mmlab/mmdetection.git
+  cd mmdetection
+  git checkout v2.19.0
+  pip install -r requirements/build.txt
+  pip install -v -e .  # or "python setup.py develop"
+  ```
+- mmdet3d: https://github.com/open-mmlab/mmdetection3d.git \
+  選到tag v0.18.1
+  ```bash
+  git clone https://github.com/open-mmlab/mmdetection3d.git
+  cd mmdetection3d
+  git checkout v0.18.1
+  pip install -v -e .  # or "python setup.py develop"
+  ```
+- 可能還要裝mmsegmentation跟mmengine，有點忘記了，到時候再說。
 
 
-\
 \
 ARS_548_RDI Driver
 ================
