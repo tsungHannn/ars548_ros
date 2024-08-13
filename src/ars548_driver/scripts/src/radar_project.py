@@ -3,9 +3,14 @@
 import rospy
 import cv2
 import numpy as np
-from sensor_msgs.msg import PointCloud2, Image
+from sensor_msgs.msg import PointCloud2, Image, PointField
+from std_msgs.msg import Header
 from sensor_msgs import point_cloud2
 from cv_bridge import CvBridge, CvBridgeError
+import sensor_msgs.point_cloud2 as pc2
+import message_filters
+from ars548_messages.msg import ObjectList
+
 """
 camera matrix
 [2033,    0, 1068]
@@ -15,13 +20,27 @@ camera matrix
 class LidarToImageProjection:
     def __init__(self):
         rospy.init_node('lidar_to_image_projection', anonymous=True)
+        
+        # # 新的內參
+        # # 看來校正過的參數完全沒有用
+        # self.camera_matrix = np.array([
+        #     [1783.69427,          0,  1040.45305],
+        #     [         0, 1776.08826, 797.5032072],
+        #     [         0,          0,           1]
+        #     ])
+        # self.extrinsics_matrix = np.array([
+        #     [ 0.0730273, -0.994209,  -0.0788437, -0.110617],
+        #     [-0.0130644, 0.0780941,    -0.99686,  0.591691],
+        #     [  0.997244, 0.0738281, -0.00728578, -0.813025],
+        #     [         0,         0,           0,         1]
+        #     ])
 
+
+        # 原本的內參 + 校正
         self.camera_matrix = np.array([
-            [2033, 0, 1068],
-            [0, 2056, 539],
-            [0, 0, 1]
-        ])
-
+                [2033,    0, 1068],
+                [0   , 2056,  539],
+                [0   ,    0,    1]])
         self.extrinsics_matrix = np.array([
             [0.00130471,  -0.999894,  0.0145059,   0.970467],
             [ 0.0693163, -0.0143808,  -0.997491,    1.88237],
@@ -31,8 +50,16 @@ class LidarToImageProjection:
 
         self.bridge = CvBridge()
         self.image_sub = rospy.Subscriber('/aravis_cam/image_color_row', Image, self.image_callback)
-        self.lidar_sub = rospy.Subscriber('/radar_filter', PointCloud2, self.lidar_callback)
+        self.lidar_sub = rospy.Subscriber('/radar_filter', PointCloud2, self.lidar_callback) # 把filter過得雷達點project到RGB上
+
+        self.radar_pc = message_filters.Subscriber('/radar/point_cloud_object', PointCloud2)
+        self.radar_obj = message_filters.Subscriber('/radar/object_list', ObjectList) # ARS548 object_list
+        self.sync = message_filters.ApproximateTimeSynchronizer([self.radar_pc, self.radar_obj], queue_size=10, slop=0.1)
+        self.sync.registerCallback(self.radarCallback)
+
         self.image_pub = rospy.Publisher('/projected_image', Image, queue_size=1)
+        # self.pub_radar_filter = rospy.Publisher('/radar_filter', PointCloud2, queue_size=10)
+        self.pub_radar_obj = rospy.Publisher('/radar_filter', PointCloud2, queue_size=10)
 
         self.current_image = None
         self.lidar_points = np.empty((0, 3))
@@ -50,6 +77,62 @@ class LidarToImageProjection:
         self.lidar_points = np.array(self.lidar_points)
         self.project_lidar_to_image()
 
+
+    def radarCallback(self, radar_pc, radar_obj):
+        
+        filtered_points_pc = []
+        filtered_points_obj = []
+
+        # Iterate through the points in the PointCloud2 message
+        for obj in radar_obj.objectlist_objects:
+            id = obj.u_id
+            x = obj.u_position_x
+            y = obj.u_position_y
+            z = obj.u_position_z
+            vx = obj.f_dynamics_absvel_x
+            vy = obj.f_dynamics_absvel_y
+            if (vx**2 + vy**2)**0.5 > 1:
+                filtered_points_obj.append([x, y, z, vx, vy, id])
+
+        # for point in pc2.read_points(radar_pc, field_names=("x", "y", "z", "vx", "vy", "id"), skip_nans=True):
+        #     x, y, z, vx, vy = point
+        #     if (vx**2 + vy**2)**0.5 > 1:
+        #         filtered_points_pc.append([x, y, z, vx, vy])
+
+        # # pc
+        # header = Header()
+        # header.stamp = rospy.Time.now()
+        # header.frame_id = radar_pc.header.frame_id
+        # fields = [
+        #     PointField('x', 0, PointField.FLOAT32, 1),
+        #     PointField('y', 4, PointField.FLOAT32, 1),
+        #     PointField('z', 8, PointField.FLOAT32, 1),
+        #     PointField('vx', 12, PointField.FLOAT32, 1),
+        #     PointField('vy', 16, PointField.FLOAT32, 1)
+        # ]
+
+        # filtered_cloud = pc2.create_cloud(header, fields, filtered_points_pc)
+        # self.pub_radar_filter.publish(filtered_cloud)
+
+        # obj
+        header = Header()
+        header.stamp = rospy.Time.now()
+        header.frame_id = radar_pc.header.frame_id
+        fields = [
+            PointField('x', 0, PointField.FLOAT32, 1),
+            PointField('y', 4, PointField.FLOAT32, 1),
+            PointField('z', 8, PointField.FLOAT32, 1),
+            PointField('vx', 12, PointField.FLOAT32, 1),
+            PointField('vy', 16, PointField.FLOAT32, 1),
+            PointField('id', 20, PointField.FLOAT32, 1)
+        ]
+
+        filtered_cloud_obj = pc2.create_cloud(header, fields, filtered_points_obj)
+
+        self.pub_radar_obj.publish(filtered_cloud_obj)
+
+        # print(radar_msg.timestamp_seconds, radar_msg.timestamp_nanoseconds)
+
     def project_lidar_to_image(self):
         if self.current_image is None or self.lidar_points.size == 0:
             return
@@ -66,7 +149,7 @@ class LidarToImageProjection:
         for point in pixel_coordinates:
             x, y = int(point[0]), int(point[1])
             if 0 <= x < self.current_image.shape[1] and 0 <= y < self.current_image.shape[0]:
-                cv2.circle(self.current_image, (x, y), 5, (0, 255, 0), -1)
+                cv2.circle(self.current_image, (x, y), 10, (0, 255, 0), -1)
 
         try:
             image_message = self.bridge.cv2_to_imgmsg(self.current_image, "bgr8")

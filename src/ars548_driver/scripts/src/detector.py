@@ -37,6 +37,32 @@ class BEVHeightRosInference:
         # sensor2sensor_mats = self.mats_dict['sensor2sensor_mats']
         # sensor2virtual_mats = self.mats_dict['sensor2virtual_mats']
         # bda_mat = self.mats_dict['bda_mat']
+
+        print("original:")
+        print(self.mats_dict['intrin_mats'])
+        print("--------------------------")
+        # 舊內參
+        camera_intrinsic = np.array([
+
+                [2033,    0, 1068, 0],
+                [   0, 2056,  539, 0],
+                [   0,    0,    1, 0],
+                [   0,    0,    0, 1]
+                ], dtype=np.float32)
+        # # 新內參
+        # camera_intrinsic = np.array([
+        #         [1783.69427,          0,  1040.45305, 0],
+        #         [         0, 1776.08826, 797.5032072, 0],
+        #         [         0,          0,           1, 0],
+        #         [         0,          0,           0, 1]
+        #         ], dtype=np.float32)
+        camera_intrinsic = torch.from_numpy(camera_intrinsic)
+        camera_intrinsic = camera_intrinsic.unsqueeze(0).unsqueeze(0).unsqueeze(0)
+        
+        self.mats_dict['intrin_mats'] = camera_intrinsic
+
+        print("new")
+        print(self.mats_dict['intrin_mats'])
         rospy.init_node('bev_height_inference', anonymous=True)
         rospy.Subscriber('/aravis_cam/image_color_row', Image, self.callback)
 
@@ -124,11 +150,20 @@ class BEVHeightRosInference:
                 # src_calib_file = os.path.join(dair_root, "validation/calib", sample_token + ".txt")
             result_files, tmp_dir = format_results(all_pred_results, all_img_metas)
             Tr_velo_to_cam, r_velo2cam, t_velo2cam = get_velo2cam()
+            # 舊內參
             camera_intrinsic = np.array([
                                         [2033, 0, 1068],
                                         [0, 2056, 539],
                                         [0, 0, 1]
                                     ])
+
+            # # 新內參
+            # camera_intrinsic = np.array([
+            #     [1783.69427,          0,  1040.45305],
+            #     [         0, 1776.08826, 797.5032072],
+            #     [         0,          0,           1]
+            #     ])
+            
             camera_intrinsic = np.concatenate([camera_intrinsic, np.zeros((camera_intrinsic.shape[0], 1))], axis=1)
             preds = result_files['img_bbox']
             pred_lines = []
@@ -153,7 +188,7 @@ class BEVHeightRosInference:
                 cam_x, cam_y, cam_z = convert_point(np.array([x, y, z, 1]).T, Tr_velo_to_cam)
                 box = get_lidar_3d_8points([w, l, h], yaw_lidar, [x, y, z + h/2])
                 box2d = bbbox2bbox(box, Tr_velo_to_cam, camera_intrinsic)
-
+                print(class_name)
                 if detection_score > 0.45 and class_name in category_map_rope3d.keys():
                     print("@@@@@@@@@@@@@@@@@@@@@@")
                     i1 = category_map_rope3d[class_name]
@@ -173,6 +208,8 @@ class BEVHeightRosInference:
                     pred_lines.append(line) # 這個就是像這種
                     # Car 0 0 1.6138 619.1764 366.0287 722.9627 465.0574 1.1012 1.81 4.2636 -5.9165 -1.9003 44.1509 4.6289 0.7451
                     bboxes.append(box)
+            print("BBBBBBBBBBBBBBBBB")
+            print(bboxes)
 
 
             color_map = {"Car":(0, 255, 0), "Bus":(0, 255, 255), "Pedestrian":(255, 255, 0), "Cyclist":(0, 0, 255)}
