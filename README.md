@@ -13,10 +13,14 @@
 
 
 ## 資料集
+
 1. rope_calib.py：產生calib，裡面是內參
 2. rope_denorm.py：產生denorm，裡面是用外參算的道路方程式
-3. sustech2kitti.py：把標注資料的座標系轉成kitti座標系，把格式也換成kitti
-4. 之後就照著BEVHeight的kitti資料格式，就可以用BEVHeight裡面的visual_tools.py可視化標注結果
+3. rope2kitti.py：讀取myRope3d，產生myrope3d-kitti
+4. sustech2kitti.py：把標注資料的座標系轉成kitti座標系，把格式也換成kitti\
+   **然後把拿到的label資料直接放進myrope3d-kitti**\
+   感覺沒辦法產生正確的Rope3D標注資料，只能產生kitti的
+6. 之後就照著BEVHeight的kitti資料格式，就可以用BEVHeight裡面的visual_tools.py可視化標注結果
     ```
     myrope3d-kiiti
     | -- training
