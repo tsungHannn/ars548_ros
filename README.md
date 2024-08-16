@@ -1,5 +1,34 @@
 # ARS548
 
+# 產生訓練資料
+## 標注
+1. 用TOOLS_ROSBAG2KITTI把Rosbag轉成png及pcd。其中，雷達資料分成：\
+    object: 雷達處理過的物件資料\
+    filter: 只留下速度大於1的object\
+    detection: 雷達原始點雲資料
+2. 用雷達的filter進行標注: label_filter.py。會對每個點產生一個物件框
+3. 手動調整每個物件框的類別
+4. modify_scale_by_obj_type.py：依據每個type，產生固定大小的物件框
+
+
+
+## 資料集
+1. rope_calib.py：產生calib，裡面是內參
+2. rope_denorm.py：產生denorm，裡面是用外參算的道路方程式
+3. sustech2kitti.py：把標注資料的座標系轉成kitti座標系，把格式也換成kitti
+4. 之後就照著BEVHeight的kitti資料格式，就可以用BEVHeight裡面的visual_tools.py可視化標注結果
+    ```
+    myrope3d-kiiti
+    | -- training
+    |       | -- calib
+    |       | -- denorm
+    |       | -- image_2
+    |       | -- label_2
+    ```
+    ```bash
+    python scripts/data_converter/visual_tools.py --data_root /john/ncsist/test_annotation/myrope3d-kitti/ --demo_dir /john/ncsist/test_annotation/demo
+    ```
+
 # 相機內參
 約90張棋盤格
 ```
