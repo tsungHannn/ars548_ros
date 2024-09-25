@@ -3,3 +3,6 @@ devel/
 .catkin_workspace
 src/ars548_driver/weights/
 ars548_document/
+det_png/
+det_txt/
+original_png/

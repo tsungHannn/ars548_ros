@@ -24,10 +24,26 @@
 
     <!-- <node
         pkg="ars548_driver"
-        type="detector.py"
-        name="detector"
+        type="keyboard.py"
+        name="keyboard"
         output="screen"
     /> -->
+
+    <!-- camera only -->
+    <!-- <node
+        pkg="ars548_driver"
+        type="detector_rgb.py"
+        name="detector_rgb"
+        output="screen"
+    /> -->
+
+    <!-- camera + radar -->
+    <node
+        pkg="ars548_driver"
+        type="detector_radar.py"
+        name="detector_radar"
+        output="screen"
+    />
 
     <!-- 啟動rviz節點 -->
     <node 
