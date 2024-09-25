@@ -169,7 +169,11 @@ python setup.py develop
   git checkout v0.18.1
   pip install -v -e .  # or "python setup.py develop"
   ```
-- 可能還要裝mmsegmentation跟mmengine，有點忘記了，到時候再說。
+- mmsegmentation
+  ```
+  pip install mmsegmentation==0.20.1
+  ```
+- 可能還要裝mmengine，有點忘記了，到時候再說。
 
 
 \
