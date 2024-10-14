@@ -37,25 +37,25 @@ class LidarToImageProjection:
         #             [  0.997055,  0.0648243, -0.0409714,  -0.503814],
         #             [         0,          0,          0,          1]
         # ])
-        # cal6.bag
-        self.extrinsics_matrix = np.array([
-            [-0.0498244,  -0.995333, -0.0826376,  -0.240135],
-            [ 0.0091128,  0.0822836,  -0.996568,    3.54319],
-            [  0.998716, -0.0504063,  0.0049704,   -0.53661],
-            [         0,          0,          0,          1]
-
-        ])
-
-        
-
-
-        
+        # # cal6.bag
         # self.extrinsics_matrix = np.array([
-        #     [ 0.0622288,  -0.997539,  0.0322897,   0.422767],
-        #     [-0.0448152, -0.0351127,  -0.998378,    1.46257],
-        #     [  0.997055,  0.0606809, -0.0468901,  -0.503814],
+        #     [-0.0498244,  -0.995333, -0.0826376,  -0.240135],
+        #     [ 0.0091128,  0.0822836,  -0.996568,    3.54319],
+        #     [  0.998716, -0.0504063,  0.0049704,   -0.53661],
         #     [         0,          0,          0,          1]
+
         # ])
+
+        
+
+
+        
+        self.extrinsics_matrix = np.array([
+            [ 0.0622288,  -0.997539,  0.0322897,   0.422767],
+            [-0.0448152, -0.0351127,  -0.998378,    1.46257],
+            [  0.997055,  0.0606809, -0.0468901,  -0.503814],
+            [         0,          0,          0,          1]
+        ])
 
         # # 原本的內參 + 校正
         # self.camera_matrix = np.array([
@@ -79,7 +79,7 @@ class LidarToImageProjection:
         
         self.radar_pc = message_filters.Subscriber('/radar/point_cloud_object', PointCloud2)
         self.radar_obj = message_filters.Subscriber('/radar/object_list', ObjectList) # ARS548 object_list
-        self.sync = message_filters.ApproximateTimeSynchronizer([self.radar_pc, self.radar_obj], queue_size=10, slop=0.1)
+        self.sync = message_filters.ApproximateTimeSynchronizer([self.radar_pc, self.radar_obj], queue_size=1, slop=0.1)
         self.sync.registerCallback(self.radarCallback)
 
         self.image_pub = rospy.Publisher('/projected_image', Image, queue_size=1)
@@ -87,8 +87,8 @@ class LidarToImageProjection:
 
         # 底下兩個都跟原本的雷達資料不同
         # 包含(x, y, z, vx, vy, id)
-        self.pub_radar_filter = rospy.Publisher('/radar_filter', PointCloud2, queue_size=10)
-        self.pub_radar_object = rospy.Publisher('/radar_object', PointCloud2, queue_size=10)   # 拿來訓練用的
+        self.pub_radar_filter = rospy.Publisher('/radar_filter', PointCloud2, queue_size=1)
+        self.pub_radar_object = rospy.Publisher('/radar_object', PointCloud2, queue_size=1)   # 拿來訓練用的
 
         self.current_image = None
         self.lidar_points = np.empty((0, 3))
@@ -139,84 +139,84 @@ class LidarToImageProjection:
             # range_marker.points.append(Point(x=0, y=0, z=0.5))
 
             # wide range
-            rotate = -40 * math.pi / 180.0 + radar_transform[2]
+            rotate = -60 * math.pi / 180.0 + radar_transform[2]
             range_marker.points.append(Point(
-                x=math.cos(rotate) * 70 - math.sin(rotate) * 0,
-                y=math.sin(rotate) * 70 + math.cos(rotate) * 0
+                x=math.cos(rotate) * 300 - math.sin(rotate) * 0,
+                y=math.sin(rotate) * 300 + math.cos(rotate) * 0
             ))
-            rotate = -46 * math.pi / 180.0 + radar_transform[2]
-            range_marker.points.append(Point(
-                x=math.cos(rotate) * 35 - math.sin(rotate) * 0,
-                y=math.sin(rotate) * 35 + math.cos(rotate) * 0
-            ))
+            # rotate = -46 * math.pi / 180.0 + radar_transform[2]
+            # range_marker.points.append(Point(
+            #     x=math.cos(rotate) * 35 - math.sin(rotate) * 0,
+            #     y=math.sin(rotate) * 35 + math.cos(rotate) * 0
+            # ))
             range_marker.points.append(Point(
                 x=0 + radar_transform[0],
                 y=0 + radar_transform[1]
             ))
-            rotate = 46 * math.pi / 180.0 + radar_transform[2]
+            # rotate = 46 * math.pi / 180.0 + radar_transform[2]
+            # range_marker.points.append(Point(
+            #     x=math.cos(rotate) * 35 - math.sin(rotate) * 0,
+            #     y=math.sin(rotate) * 35 + math.cos(rotate) * 0
+            # ))
+            rotate = 60 * math.pi / 180.0 + radar_transform[2]
             range_marker.points.append(Point(
-                x=math.cos(rotate) * 35 - math.sin(rotate) * 0,
-                y=math.sin(rotate) * 35 + math.cos(rotate) * 0
+                x=math.cos(rotate) * 300 - math.sin(rotate) * 0,
+                y=math.sin(rotate) * 300 + math.cos(rotate) * 0
             ))
-            rotate = 40 * math.pi / 180.0 + radar_transform[2]
-            range_marker.points.append(Point(
-                x=math.cos(rotate) * 70 - math.sin(rotate) * 0,
-                y=math.sin(rotate) * 70 + math.cos(rotate) * 0
-            ))
-            for i in range(40, -41, -5):
+            for i in range(60, -61, -5):
                 rotate = i * math.pi / 180.0 + radar_transform[2]
                 range_marker.points.append(Point(
-                    x=math.cos(rotate) * 70 - math.sin(rotate) * 0,
-                    y=math.sin(rotate) * 70 + math.cos(rotate) * 0
+                    x=math.cos(rotate) * 300 - math.sin(rotate) * 0,
+                    y=math.sin(rotate) * 300 + math.cos(rotate) * 0
                 ))
             range_markers.markers.append(range_marker)
 
-            # narrow range
-            range_marker = Marker(
-                header=Header(frame_id="ARS_548", stamp=rospy.Time.now()),
-                id=id,
-                ns="range_marker_narrow",
-                type=Marker.LINE_STRIP,
-                action=Marker.ADD,
-                pose=Pose(
-                    position=Point(x=0, y=0, z=0.1),
-                    orientation=Quaternion(x=0, y=0, z=0, w=1.0)
-                ),
-                scale=Vector3(x=0.5, y=0.1, z=0.1),
-                color=ColorRGBA(r=1.0, g=0.0, b=0.0, a=1.0)
-            )
-            id = id + 1
+            # # narrow range
+            # range_marker = Marker(
+            #     header=Header(frame_id="ARS_548", stamp=rospy.Time.now()),
+            #     id=id,
+            #     ns="range_marker_narrow",
+            #     type=Marker.LINE_STRIP,
+            #     action=Marker.ADD,
+            #     pose=Pose(
+            #         position=Point(x=0, y=0, z=0.1),
+            #         orientation=Quaternion(x=0, y=0, z=0, w=1.0)
+            #     ),
+            #     scale=Vector3(x=0.5, y=0.1, z=0.1),
+            #     color=ColorRGBA(r=1.0, g=0.0, b=0.0, a=1.0)
+            # )
+            # id = id + 1
             
-            rotate = 4 * math.pi / 180.0 + radar_transform[2]
-            range_marker.points.append(Point(
-                x=math.cos(rotate) * 250 - math.sin(rotate) * 0,
-                y=math.sin(rotate) * 250 + math.cos(rotate) * 0
-            ))
-            rotate = 9 * math.pi / 180.0 + radar_transform[2]
-            range_marker.points.append(Point(
-                x=math.cos(rotate) * 150 - math.sin(rotate) * 0,
-                y=math.sin(rotate) * 150 + math.cos(rotate) * 0
-            ))
-            range_marker.points.append(Point(
-                x=0 + radar_transform[0],
-                y=0 + radar_transform[1]
-            ))
-            rotate = -9 * math.pi / 180.0 + radar_transform[2]
-            range_marker.points.append(Point(
-                x=math.cos(rotate) * 150 - math.sin(rotate) * 0,
-                y=math.sin(rotate) * 150 + math.cos(rotate) * 0
-            ))
-            rotate = -4 * math.pi / 180.0 + radar_transform[2]
-            range_marker.points.append(Point(
-                x=math.cos(rotate) * 250 - math.sin(rotate) * 0,
-                y=math.sin(rotate) * 250 + math.cos(rotate) * 0
-            ))
-            rotate = 4 * math.pi / 180.0 + radar_transform[2]
-            range_marker.points.append(Point(
-                x=math.cos(rotate) * 250 - math.sin(rotate) * 0,
-                y=math.sin(rotate) * 250 + math.cos(rotate) * 0
-            ))
-            range_markers.markers.append(range_marker)
+            # rotate = 4 * math.pi / 180.0 + radar_transform[2]
+            # range_marker.points.append(Point(
+            #     x=math.cos(rotate) * 250 - math.sin(rotate) * 0,
+            #     y=math.sin(rotate) * 250 + math.cos(rotate) * 0
+            # ))
+            # rotate = 9 * math.pi / 180.0 + radar_transform[2]
+            # range_marker.points.append(Point(
+            #     x=math.cos(rotate) * 150 - math.sin(rotate) * 0,
+            #     y=math.sin(rotate) * 150 + math.cos(rotate) * 0
+            # ))
+            # range_marker.points.append(Point(
+            #     x=0 + radar_transform[0],
+            #     y=0 + radar_transform[1]
+            # ))
+            # rotate = -9 * math.pi / 180.0 + radar_transform[2]
+            # range_marker.points.append(Point(
+            #     x=math.cos(rotate) * 150 - math.sin(rotate) * 0,
+            #     y=math.sin(rotate) * 150 + math.cos(rotate) * 0
+            # ))
+            # rotate = -4 * math.pi / 180.0 + radar_transform[2]
+            # range_marker.points.append(Point(
+            #     x=math.cos(rotate) * 250 - math.sin(rotate) * 0,
+            #     y=math.sin(rotate) * 250 + math.cos(rotate) * 0
+            # ))
+            # rotate = 4 * math.pi / 180.0 + radar_transform[2]
+            # range_marker.points.append(Point(
+            #     x=math.cos(rotate) * 250 - math.sin(rotate) * 0,
+            #     y=math.sin(rotate) * 250 + math.cos(rotate) * 0
+            # ))
+            # range_markers.markers.append(range_marker)
         self.pub_range.publish(range_markers)
 
 
@@ -272,30 +272,33 @@ class LidarToImageProjection:
             # 畫雷達範圍
             self.drawRadarRange()
             # effective range
-            effective_range = True
 
             effective_range = False
             angle = math.atan2(y, x) * 180 / math.pi
             dist = math.sqrt(x ** 2 + y ** 2)
-
-            if (dist < (10 / math.cos(60 * math.pi / 180)) and abs(angle) < 60) or \
-            (dist < 70 and abs(angle) < 40) or \
-            (dist < 150 and abs(angle) < 9) or \
-            (dist < 250 and abs(angle) < 4):
+            elevation_angle = math.degrees(math.atan2(z, dist))
+            
+            if (dist < 100 and abs(elevation_angle) < 14 and abs(angle) < 60) or \
+                (dist < 300 and abs(elevation_angle) < 4 and abs(angle) < 60):
                 effective_range = True
-            elif x > 10 and x < 70 * math.cos(40 * math.pi / 180):
-                delta_x = (x - 10) / (70 * math.cos(40 * math.pi / 180) - 10)
-                delta_y = delta_x * (70 * math.sin(40 * math.pi / 180) - (10 / math.cos(60 * math.pi / 180) * math.sin(60 * math.pi / 180))) + \
-                        (10 / math.cos(60 * math.pi / 180) * math.sin(60 * math.pi / 180))
-                if abs(y) < delta_y:
-                    effective_range = True
-            elif x > 150 and x < 250:
-                delta_x = (x - 150) / (250 - 150)
-                delta_y = delta_x * ((250 / math.cos(4 * math.pi / 180) * math.sin(4 * math.pi / 180)) - \
-                                    (150 / math.cos(9 * math.pi / 180) * math.sin(9 * math.pi / 180))) + \
-                        (150 / math.cos(9 * math.pi / 180) * math.sin(9 * math.pi / 180))
-                if abs(y) < delta_y:
-                    effective_range = True
+            # if (dist < (10 / math.cos(60 * math.pi / 180)) and abs(angle) < 60) or \
+            # (dist < 70 and abs(angle) < 40) or \
+            # (dist < 150 and abs(angle) < 9) or \
+            # (dist < 250 and abs(angle) < 4):
+            #     effective_range = True
+            # elif x > 10 and x < 70 * math.cos(40 * math.pi / 180):
+            #     delta_x = (x - 10) / (70 * math.cos(40 * math.pi / 180) - 10)
+            #     delta_y = delta_x * (70 * math.sin(40 * math.pi / 180) - (10 / math.cos(60 * math.pi / 180) * math.sin(60 * math.pi / 180))) + \
+            #             (10 / math.cos(60 * math.pi / 180) * math.sin(60 * math.pi / 180))
+            #     if abs(y) < delta_y:
+            #         effective_range = True
+            # elif x > 150 and x < 250:
+            #     delta_x = (x - 150) / (250 - 150)
+            #     delta_y = delta_x * ((250 / math.cos(4 * math.pi / 180) * math.sin(4 * math.pi / 180)) - \
+            #                         (150 / math.cos(9 * math.pi / 180) * math.sin(9 * math.pi / 180))) + \
+            #             (150 / math.cos(9 * math.pi / 180) * math.sin(9 * math.pi / 180))
+            #     if abs(y) < delta_y:
+            #         effective_range = True
             
 
             if effective_range == True:
@@ -316,8 +319,8 @@ class LidarToImageProjection:
                         action=Marker.ADD,
                         # text=f"id: {obj.u_id} cls: {obj.classT}\n{dist:.2f}m\n{speed*3.6:.2f}km/h\n{obj.vrelX:.2f} {obj.vrelY:.2f}",
                         # text=f"id: {obj.u_id}\n WxL:{width:.2f}x{length:.2f}m\n{speed*3.6:.2f}km/h\nClass:{classification[max_index]}",
-                        # text=f"id: {obj.u_id}\n{speed*3.6:.2f}km/h\nClass:{classification[max_index]}",
-                        text=f"x:{obj.u_position_x}\ny:{obj.u_position_y}\nz:{obj.u_position_z}",
+                        text=f"dist: {dist:.2f}\nelevation_angle: {elevation_angle:.2f}\n{speed*3.6:.2f}km/h\nClass:{classification[max_index]}",
+                        # text=f"x:{obj.u_position_x}\ny:{obj.u_position_y}\nz:{obj.u_position_z}",
                         pose=Pose(
                             position=Point(x=obj.u_position_x, y=obj.u_position_y, z=obj.u_position_z),
                             orientation=Quaternion(x=0, y=0, z=1)
@@ -349,7 +352,8 @@ class LidarToImageProjection:
 
         # obj
         header = Header()
-        header.stamp = rospy.Time.now()
+        # header.stamp = rospy.Time.now()
+        header.stamp = radar_obj.header.stamp
         header.frame_id = radar_pc.header.frame_id
         fields = [
             PointField('x', 0, PointField.FLOAT32, 1),

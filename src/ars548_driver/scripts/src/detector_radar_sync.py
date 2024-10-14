@@ -10,9 +10,11 @@ from PIL import Image as PILImage
 from BEVHeight_radar.models.bev_height import BEVHeight as BEVHeight_radar
 import numpy as np
 from mmdet3d.core.bbox.structures.lidar_box3d import LiDARInstance3DBoxes
+import message_filters
 
 from visualize_detect import *
-from tracker import get_2d_bounding_box
+# from tracker import get_2d_bounding_box
+from mySort import Sort, draw_boxes, get_2d_bounding_box
 
 from visualization_msgs.msg import MarkerArray, Marker
 from std_msgs.msg import Header, ColorRGBA
@@ -24,6 +26,16 @@ import time
 
 # range_config 有 r50_102 跟 r50_140 兩種
 range_config = "r50_102"
+
+tracking_class = {  "car": 0, 
+                    "van": 0, 
+                    "truck": 1, 
+                    "bus": 1, 
+                    "pedestrian": 2, 
+                    "bicycle": 3, 
+                    "trailer": 3, 
+                    "motorcycle": 3}
+tracking_class_name = ["Car", "Bus", "Pedestrian", "Cyclist"]
 
 # BEVHeight radar
 
@@ -80,8 +92,8 @@ class BEVHeight_Radar_Ros_Inference:
 
 
         rospy.init_node('bev_height_inference', anonymous=True)
-        rospy.Subscriber('/aravis_cam/image_color_row', Image, self.cameraCallback)
-        rospy.Subscriber('/radar_object', PointCloud2, self.radarCallback)
+        # rospy.Subscriber('/aravis_cam/image_color_row', Image, self.cameraCallback)
+        # rospy.Subscriber('/radar_object', PointCloud2, self.radarCallback)
         self.camera_captured = False
 
         self.camera_input_tensor = ''
@@ -92,18 +104,21 @@ class BEVHeight_Radar_Ros_Inference:
         self.marker_pub = rospy.Publisher('detected_object_marker', MarkerArray, queue_size=10)
         self.radar_hz_pub = rospy.Publisher('/radar_hz', String, queue_size=1)
         self.camera_hz_pub = rospy.Publisher('/camera_hz', String, queue_size=1)
+        
+        #.... Initialize SORT .... 
+        #......................... 
+        sort_max_age = 5
+        sort_min_hits = 2
+        sort_iou_thresh = 0.2
+        self.sort_tracker = Sort(max_age=sort_max_age,
+                        min_hits=sort_min_hits,
+                        iou_threshold=sort_iou_thresh)
+        #......................... 
 
-        # 緩存設定
-        # self.camera_buffer = collections.deque(maxlen=10)  # 緩存10幀相機資料
-        # self.camera_cv_image = collections.deque(maxlen=10) # 緩存10幀原始影像
-        # self.radar_buffer = collections.deque(maxlen=10)   # 緩存10幀雷達資料
-        # self.output_buffer = collections.deque(maxlen=10)
-        # self.camera_ready = False
-        # self.radar_ready = False
-        # self.processing_thread = threading.Thread(target=self.process_batch, daemon=True)
-        # self.processing_thread.start()  # 啟動批量處理執行緒
-        # self.output_thread = threading.Thread(target=self.process_output, daemon=True)
-        # self.output_thread.start()  # 啟動批量處理執行緒
+        self.rgb_sub = message_filters.Subscriber('/aravis_cam/image_color_row', Image)
+        self.radar_sub = message_filters.Subscriber('/radar_object', PointCloud2)
+        self.sync = message_filters.ApproximateTimeSynchronizer([self.rgb_sub, self.radar_sub], queue_size=1, slop=0.1)
+        self.sync.registerCallback(self.syncCallback)
         
         print("###"*10)
         print("BEVHeight Radar READY")
@@ -214,183 +229,109 @@ class BEVHeight_Radar_Ros_Inference:
 
 
 
-    def process_batch(self):
-        """批量處理相機與雷達資料"""
-        while True:
-            if len(self.camera_buffer) > 4 and len(self.radar_buffer) > 4:
-                camera_data = list()
-                radar_data = list()
-                for i in range(4):
-                    camera_data.append(self.camera_buffer.popleft())  # 取出4幀相機資料
-                    radar_data.append(self.radar_buffer.popleft())    # 取出4幀雷達資料
-                
-                camera_data = torch.stack(camera_data)
-                camera_data = camera_data.to(self.device)
-                
-                radar_data = torch.stack(radar_data)
-                radar_data = radar_data.to(self.device)
-                # 將相機和雷達資料送入模型進行推理
-                
-                with torch.no_grad():
-                    output = self.model(camera_data, self.batch_mats_dict, radar_data)
-                    for batch in output:
-                        self.output_buffer.append(batch)
-                        # self.process_output(output, self.camera_cv_image.copy())
-
-                self.camera_ready = False
-                self.radar_ready = False
-
-
-
-    def cameraCallback(self, data):
-
-        if self.camera_captured:
-            return
-
+    def syncCallback(self, imgData, radarData):
         try:
-            start_time = time.time()
-            cv_image = self.bridge.imgmsg_to_cv2(data, 'bgr8')
-            # self.camera_cv_image.append(cv_image.copy())
-            self.camera_cv_image = cv_image.copy()
-            first_time = time.time()
+            # start_time = time.time()
+            # Camera
+            cv_image = self.bridge.imgmsg_to_cv2(imgData, 'bgr8')
 
-            pil_image = PILImage.fromarray(cv2.cvtColor(cv_image, cv2.COLOR_BGR2RGB))
-            # pil_image = cv_image[:, :, (2,1,0)]
-
+            # pil_image = PILImage.fromarray(cv2.cvtColor(cv_image, cv2.COLOR_BGR2RGB))
+            pil_image = cv_image[:, :, (2,1,0)]
             resize, resize_dims, crop, flip, rotate_ida = self.sample_ida_augmentation()
-            second_time = time.time()
 
+            # first_time = time.time()
             # 這部分耗費最多時間
-            input_tensor = self.preprocess_image(
-                    img=pil_image,
-                    resize=resize,
-                    resize_dims=resize_dims,
-                    crop=crop,
-                    flip=flip,
-                    rotate=rotate_ida)
-            # input_tensor = self.preprocess_cv_image(
+            # input_tensor = self.preprocess_image(
             #         img=pil_image,
+            #         resize=resize,
             #         resize_dims=resize_dims,
             #         crop=crop,
             #         flip=flip,
             #         rotate=rotate_ida)
 
-            third_time = time.time()
-
-            # self.camera_buffer.append(input_tensor)
-
+            input_tensor = self.preprocess_cv_image(
+                    img=pil_image,
+                    resize_dims=resize_dims,
+                    crop=crop,
+                    flip=flip,
+                    rotate=rotate_ida)
             input_tensor = input_tensor.to(self.device)
-            self.camera_input_tensor = input_tensor
-            forth_time = time.time()
-            # for key, value in self.mats_dict.items():
-            #     self.mats_dict[key] = value.cuda()
 
-            self.camera_captured = True
-            end_time = time.time()
-            # print("======================")
+            # second_time = time.time()
+
+            # Radar
+            pc_data = pc2.read_points(radarData, field_names=("x", "y", "z", "vx", "vy"), skip_nans=True)
+        
+            radar_points = list()
+            sweep_radar_points = list()
+
+            np_x = []
+            np_y = []
+            np_z = []
+            np_vx = []
+            np_vy = []
+            np_rcs = []
+            np_dummy = []
+
+            for point in pc_data:
+                np_x.append(point[0])
+                np_y.append(point[1])
+                np_z.append(point[2])
+                np_vx.append(point[3])
+                np_vy.append(point[4])
+                np_rcs.append(0.0)
+                np_dummy.append(0.0)
+
+            np_x = np.array(np_x, dtype=np.float32)
+            np_y = np.array(np_y, dtype=np.float32)
+            np_z = np.array(np_z, dtype=np.float32)
+            np_vx = np.array(np_vx, dtype=np.float32)
+            np_vy = np.array(np_vy, dtype=np.float32)
+            np_rcs = np.array(np_rcs, dtype=np.float32)
+            np_dummy = np.array(np_dummy, dtype=np.float32)
+
+            points_32 = np.transpose(np.vstack((np_x, np_y, np_z, np_rcs, np_vx, np_vy, np_dummy)))
+
+            # third_time = time.time()
+
+            resize, resize_dims, crop, flip, rotate_ida = self.sample_ida_augmentation()
+            radar_idx = self.sample_radar_augmentation()
+            radar_point_augmented = self.transform_radar_pv(
+                            points_32, resize, self.ida_aug_conf['final_dim'],
+                            crop, flip, rotate_ida, radar_idx)
+            
+            radar_points.append(radar_point_augmented)
+
+            sweep_radar_points.append(torch.stack(radar_points))
+            final_radar_points = torch.stack(sweep_radar_points).permute(1, 0, 2, 3)
+
+
+            final_radar_points = final_radar_points.unsqueeze(0)
+            final_radar_points = final_radar_points.to(self.device)
+
+            # forth_time = time.time()
+
+            # 這部分最久
+            with torch.no_grad():
+                output = self.model(input_tensor, self.mats_dict, final_radar_points)
+                self.process_output(output, cv_image)
+            
+            # end_time = time.time()
             # print("Execution time:\t{:.6f} sec".format(end_time - start_time))
-            # print("First\t{:.6f}".format(first_time - start_time))
-            # print("Second\t{:.6f}".format(second_time - first_time))
-            # print("Third\t{:.6f}".format(third_time - second_time))
-            # print("Forth\t{:.6f}".format(forth_time - third_time))
-            # print("Fifth\t{:.6f}".format(end_time - forth_time))
-            # print("======================")
-            self.camera_hz_pub.publish("CAM")
-            # with torch.no_grad():
-            #     output = self.model(input_tensor, self.mats_dict)
-            #     self.process_output(output, cv_image.copy())
+            # print("First time:\t{:.6f} sec".format(first_time-start_time))
+            # print("Second time:\t{:.6f} sec".format(second_time-first_time))
+            # print("Third time:\t{:.6f} sec".format(third_time-second_time))
+            # print("Forth time:\t{:.6f} sec".format(forth_time-third_time))
+            # print("Fifth time:\t{:.6f} sec".format(end_time-forth_time))
         except CvBridgeError as e:
             print(e)
-        
-    def radarCallback(self, data):
-        self.camera_captured = False
-        while(self.camera_captured == False):
-            pass
-
-        start_time = time.time()
-
-        pc_data = pc2.read_points(data, field_names=("x", "y", "z", "vx", "vy"), skip_nans=True)
-        
-        radar_points = list()
-        sweep_radar_points = list()
-        first_time = time.time()
-        np_x = []
-        np_y = []
-        np_z = []
-        np_vx = []
-        np_vy = []
-        np_rcs = []
-        np_dummy = []
-
-        second_time = time.time()
-        for point in pc_data:
-            np_x.append(point[0])
-            np_y.append(point[1])
-            np_z.append(point[2])
-            np_vx.append(point[3])
-            np_vy.append(point[4])
-            np_rcs.append(0.0)
-            np_dummy.append(0.0)
-
-        np_x = np.array(np_x, dtype=np.float32)
-        np_y = np.array(np_y, dtype=np.float32)
-        np_z = np.array(np_z, dtype=np.float32)
-        np_vx = np.array(np_vx, dtype=np.float32)
-        np_vy = np.array(np_vy, dtype=np.float32)
-        np_rcs = np.array(np_rcs, dtype=np.float32)
-        np_dummy = np.array(np_dummy, dtype=np.float32)
-        third_time = time.time()
-        points_32 = np.transpose(np.vstack((np_x, np_y, np_z, np_rcs, np_vx, np_vy, np_dummy)))
-
-        resize, resize_dims, crop, flip, rotate_ida = self.sample_ida_augmentation()
-        radar_idx = self.sample_radar_augmentation()
-        radar_point_augmented = self.transform_radar_pv(
-                        points_32, resize, self.ida_aug_conf['final_dim'],
-                        crop, flip, rotate_ida, radar_idx)
-        
-        radar_points.append(radar_point_augmented)
-        forth_time = time.time()
-        sweep_radar_points.append(torch.stack(radar_points))
-        final_radar_points = torch.stack(sweep_radar_points).permute(1, 0, 2, 3)
-
-        # 想要在這裡將雷達資料儲存在radar_buffer，以便之後使用
-        # self.radar_buffer.append(final_radar_points)
-        final_radar_points = final_radar_points.unsqueeze(0)
-        final_radar_points = final_radar_points.to(self.device)
-        fifth_time = time.time()
-        self.radar_hz_pub.publish("RADAR")
-
-        # 這部分最久
-        with torch.no_grad():
-            output = self.model(self.camera_input_tensor, self.mats_dict, final_radar_points)
-            self.process_output(output, self.camera_cv_image.copy())
-        # end_time = time.time()
-        # print()
-        # print("======================")
-        # print("Execution time:\t{:.6f} sec".format(end_time - start_time))
-        # print("First\t{:.6f}".format(first_time - start_time))
-        # print("Second\t{:.6f}".format(second_time - first_time))
-        # print("Third\t{:.6f}".format(third_time - second_time))
-        # print("Forth\t{:.6f}".format(forth_time - third_time))
-        # print("Fifth\t{:.6f}".format(fifth_time - forth_time))
-        # print("Sixth\t{:.6f}".format(end_time - fifth_time))
-        # print("======================")
-
-        # print()
-
-    
 
 
     def preprocess_image(self, img, resize, resize_dims, crop, flip, rotate):
         # ====================================
-        start_time = time.time()
         # adjust image
         img = img.resize(resize_dims)
         img = img.crop(crop)
-        # if flip:
-        #     img = img.transpose(method=Image.FLIP_LEFT_RIGHT)
-        # img = img.rotate(rotate)
-        first_time = time.time()
 
         img = np.array(img)
         # mmcv.imnormalize
@@ -401,8 +342,6 @@ class BEVHeight_Radar_Ros_Inference:
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)  # inplace
         img = cv2.subtract(img, mean)  # inplace
         img = cv2.multiply(img, stdinv)  # inplace
-
-        second_time = time.time()
 
         img = torch.from_numpy(img).permute(2, 0, 1)
 
@@ -415,40 +354,16 @@ class BEVHeight_Radar_Ros_Inference:
         ret_list = [torch.stack(sweep_imgs).permute(1, 0, 2, 3, 4)]
         imgs_batch.append(ret_list[0])
 
-        end_time = time.time()
-        # print("======================")
-        # print("Execution time:\t{:.6f} sec".format(end_time - start_time))
-        # print("First\t{:.6f}".format(first_time - start_time))  # 0.05
-        # print("Second\t{:.6f}".format(second_time - first_time))# 0.04
-        # print("Third\t{:.6f}".format(end_time - second_time))# 0.02
-        # print("======================")
-
-        # return ret_list[0]
         return torch.stack(imgs_batch)
 
     
     def preprocess_cv_image(self, img, resize_dims, crop, flip, rotate):
         # ====================================
-        start_time = time.time()
-
         # Resize the image
         img = cv2.resize(img, resize_dims)
-
         # Crop the image
         x, y, w, h = crop
         img = img[y:y+h, x:x+w]
-
-        # # Flip the image if needed
-        # if flip:
-        #     img = cv2.flip(img, 1)  # 1 means horizontal flip
-
-        # # Rotate the image if needed
-        # if rotate != 0:
-        #     center = (img.shape[1] // 2, img.shape[0] // 2)
-        #     rotation_matrix = cv2.getRotationMatrix2D(center, rotate, 1.0)
-        #     img = cv2.warpAffine(img, rotation_matrix, (img.shape[1], img.shape[0]))
-
-        first_time = time.time()
 
         # Convert image to float32
         img = img.astype(np.float32)
@@ -460,8 +375,6 @@ class BEVHeight_Radar_Ros_Inference:
         img = cv2.subtract(img, mean)  # Subtract mean
         img = cv2.multiply(img, stdinv)  # Divide by std
 
-        second_time = time.time()
-
         # Convert to tensor
         img = torch.from_numpy(img).permute(2, 0, 1)
 
@@ -472,18 +385,9 @@ class BEVHeight_Radar_Ros_Inference:
         imgs.append(img)
         sweep_imgs.append(torch.stack(imgs))
         ret_list = [torch.stack(sweep_imgs).permute(1, 0, 2, 3, 4)]
-        # imgs_batch.append(ret_list[0])
+        imgs_batch.append(ret_list[0])
 
-        end_time = time.time()
-        # print("======================")
-        # print("Execution time:\t{:.6f} sec".format(end_time - start_time))
-        # print("First\t{:.6f}".format(first_time - start_time))  # 0.05
-        # print("Second\t{:.6f}".format(second_time - first_time))# 0.04
-        # print("Third\t{:.6f}".format(end_time - second_time))# 0.02
-        # print("======================")
-        
-        return ret_list[0]
-        # return torch.stack(imgs_batch)
+        return torch.stack(imgs_batch)
     
     # def process_output(self):
     def process_output(self, output, image):
@@ -547,7 +451,7 @@ class BEVHeight_Radar_Ros_Inference:
             camera_intrinsic = np.concatenate([camera_intrinsic, np.zeros((camera_intrinsic.shape[0], 1))], axis=1)
             preds = result_files['img_bbox']
             pred_lines = []
-            bboxes = []
+            tracking_list = np.empty((0,6))
 
             marker_array = MarkerArray()
             marker_array.markers.append(Marker(
@@ -576,7 +480,7 @@ class BEVHeight_Radar_Ros_Inference:
                 cam_x, cam_y, cam_z = convert_point(np.array([x, y, z, 1]).T, Tr_velo_to_cam)
                 box = get_lidar_3d_8points([w, l, h], yaw_lidar, [x, y, z + h/2])
                 box2d = bbbox2bbox(box, Tr_velo_to_cam, camera_intrinsic)
-                if detection_score > 0.45 and class_name in category_map_rope3d.keys():
+                if detection_score > 0.4 and class_name in category_map_rope3d.keys():
                     i1 = category_map_rope3d[class_name]
                     i2 = str(0)
                     i3 = str(0)
@@ -592,11 +496,11 @@ class BEVHeight_Radar_Ros_Inference:
                     i15 = str(round(yaw, 4))
                     line = [i1, i2, i3, i4, i5, i6, i7, i8, i9, i10, i11, i12, i13, i14, i15, str(round(detection_score, 4))]
                     pred_lines.append(line) # 這個就是像這種
-                    # Car 0 0 1.6138 619.1764 366.0287 722.9627 465.0574 1.1012 1.81 4.2636 -5.9165 -1.9003 44.1509 4.6289 0.7451
-                    bboxes.append(box)
-                
 
-                # if detection_score > 0.45 and class_name in category_map_rope3d.keys():
+                    # 這個2d框是模型預測的，不是3d投影到2d上的
+                    # image = cv2.rectangle(image, (int(box2d[0]), int(box2d[1])), (int(box2d[2]), int(box2d[3])), (255, 255, 255), 2) # 畫2D框
+                    # Car 0 0 1.6138 619.1764 366.0287 722.9627 465.0574 1.1012 1.81 4.2636 -5.9165 -1.9003 44.1509 4.6289 0.7451                
+
                     COLOR_LIST = {'car':ColorRGBA(r=0.0, g=0.0, b=1.0, a=1.0),
                                 'motorcycle':ColorRGBA(r=0.0, g=1.0, b=0.0, a=1.0),
                                 'bus':ColorRGBA(r=0.0, g=1.0, b=1.0, a=1.0),
@@ -656,6 +560,7 @@ class BEVHeight_Radar_Ros_Inference:
 
             self.marker_pub.publish(marker_array)
 
+            
 
             color_map = {"Car":(0, 255, 0), "Bus":(0, 255, 255), "Pedestrian":(255, 255, 0), "Cyclist":(0, 0, 255)}
             for line in pred_lines:
@@ -666,6 +571,7 @@ class BEVHeight_Radar_Ros_Inference:
                 dim = np.array(line[8:11]).astype(float)
                 location = np.array(line[11:14]).astype(float)
                 rotation_y = float(line[14])
+                
                 denorm = self.denorm
                 P2 = self.camera_intrinsic.copy()
                 P2 = np.insert(P2, 3, [0], axis=1)
@@ -676,9 +582,10 @@ class BEVHeight_Radar_Ros_Inference:
                 #     [0.0000000e+00,2.3158064e+03,5.7183185e+02,0.0000000e+00],
                 #     [0.0000000e+00,0.0000000e+00,1.0000000e+00,0.0000000e+00]]
                 
-                box_2d = project_to_image(box_3d, P2)   # 2D平面上的8個點，不確定跟預測的2D框是不是一樣的東西
-                
+                box_2d = project_to_image(box_3d, P2)   # 2D平面上的8個點，跟預測的2D框不一樣
+                x1, y1, x2, y2 = get_2d_bounding_box(box_2d)
 
+                tracking_list = np.vstack((tracking_list, np.array([int(x1), int(y1), int(x2), int(y2), detection_score, tracking_class[class_name]])))
                 image = draw_box_3d(image, box_2d, c=color_map[object_type])
             
             results_path = os.path.join("/john/ncsist/ars548_ros/")
@@ -687,7 +594,23 @@ class BEVHeight_Radar_Ros_Inference:
             # cv2.imwrite(filename=os.path.join(results_path, "original_png", "cal6_{:06d}".format(self.frame_id)+".jpg"), img=original_img)
             # write_kitti_in_txt(pred_lines, os.path.join(results_path, "det_txt", "cal6_{:06d}".format(self.frame_id) + ".txt"))
 
-            
+
+            # Run SORT
+            if len(tracking_list):
+                tracked_dets = self.sort_tracker.update(tracking_list)
+                tracks = self.sort_tracker.getTrackers()
+
+                for track in tracks:
+                    if len(tracked_dets)>0:
+                        bbox_xyxy = tracked_dets[:,:4]
+                        identities = tracked_dets[:, 8]
+                        categories = tracked_dets[:, 4]
+                        
+                        image = draw_boxes(image, bbox_xyxy, identities, categories, tracking_class_name, save_with_object_id=False)
+            else:
+                tracked_dets = self.sort_tracker.update()
+
+
 
             self.frame_id += 1  
 

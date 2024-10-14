@@ -38,10 +38,18 @@
     /> -->
 
     <!-- camera + radar -->
-    <node
+    <!-- <node
         pkg="ars548_driver"
         type="detector_radar.py"
         name="detector_radar"
+        output="screen"
+    /> -->
+
+        <!-- camera + radar -->
+    <node
+        pkg="ars548_driver"
+        type="detector_radar_sync.py"
+        name="detector_radar_sync"
         output="screen"
     />
 

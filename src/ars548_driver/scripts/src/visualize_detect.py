@@ -65,7 +65,14 @@ def get_rank() -> int:
     return dist.get_rank()
 
 
-category_map_rope3d = {"car": "Car", "van": "Car", "truck": "Bus", "bus": "Bus", "pedestrian": "Pedestrian", "bicycle": "Cyclist", "trailer": "Cyclist", "motorcycle": "Cyclist"}
+category_map_rope3d = {"car": "Car", 
+                       "van": "Car", 
+                       "truck": "Bus", 
+                       "bus": "Bus", 
+                       "pedestrian": "Pedestrian", 
+                       "bicycle": "Cyclist", 
+                       "trailer": "Cyclist", 
+                       "motorcycle": "Cyclist"}
 
 def get_cam2lidar(denorm_file):
     denorm = load_denorm(denorm_file)

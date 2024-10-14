@@ -16,6 +16,8 @@ from visualize_detect import *
 from visualization_msgs.msg import MarkerArray, Marker
 from std_msgs.msg import Header, ColorRGBA
 from geometry_msgs.msg import Pose, Point, Vector3, Quaternion
+from pynput import keyboard
+import threading
 
 # range_config 有 r50_102 跟 r50_140 兩種
 range_config = "r50_140"
@@ -66,8 +68,38 @@ class BEVHeight_Original_Ros_Inference:
         print("###"*10)
         print("BEVHeight Original READY")
         print("Range config:", range_config)
+        # 启动监听键盘按键的线程
+        # self.start_key_listener()
+
         rospy.spin()
     
+
+    # def refresh_cam_info(self):
+    #     """刷新cam_info数据"""
+    #     self.cam_info = get_cam_info("/john/ncsist/ars548_ros/src/ars548_driver/weights")
+    #     print("cam_info refreshed:", self.cam_info)
+
+    #     # 更新相关矩阵
+    #     self.mats_dict, cal_denorm = get_mats_dict(self.cam_info['cam_infos'], self.ida_aug_conf)
+    #     print("Updated mats_dict:", self.mats_dict)
+    #     self.camera_intrinsic = self.cam_info['cam_infos']['CAM_FRONT']['calibrated_sensor']['camera_intrinsic']
+    #     self.denorm = self.cam_info['cam_infos']['CAM_FRONT']['denorm']
+
+    # def on_press(self, key):
+    #     """键盘按键事件处理"""
+    #     try:
+    #         if key.char == 'r':  # 按下'r'键时刷新cam_info
+    #             print("Refreshing cam_info...")
+    #             self.refresh_cam_info()
+    #     except AttributeError:
+    #         pass  # 忽略特殊键
+
+    # def start_key_listener(self):
+    #     """开启键盘监听器"""
+    #     listener = keyboard.Listener(on_press=self.on_press)
+    #     listener.start()  # 启动监听
+
+
     def sample_ida_augmentation(self):
         """Generate ida augmentation values based on ida_config."""
         H, W = self.ida_aug_conf['H'], self.ida_aug_conf['W']
@@ -85,7 +117,10 @@ class BEVHeight_Original_Ros_Inference:
     
     def callback(self, data):
         try:
+            import time
+            # start_time = time.time()
             # cv_image = cv2.imread("/john/ncsist/ars548_ros/src/ars548_driver/weights/test.jpg")
+
             cv_image = self.bridge.imgmsg_to_cv2(data, 'bgr8')
 
             pil_image = PILImage.fromarray(cv2.cvtColor(cv_image, cv2.COLOR_BGR2RGB))
@@ -107,8 +142,15 @@ class BEVHeight_Original_Ros_Inference:
                 self.mats_dict[key] = value.cuda()
 
             with torch.no_grad():
+                # det_start = time.time()
+                
                 output = self.model(input_tensor, self.mats_dict)
                 self.process_output(output, cv_image.copy())
+                # end_time = time.time()
+
+                # print("Execution:", end_time-start_time, "sec")
+                # print("Detection:", end_time-det_start, "sec")
+                # print("-"*10)
         except CvBridgeError as e:
             print(e)
     
