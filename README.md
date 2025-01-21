@@ -1,21 +1,5 @@
 # ARS548
 
-## 資料集
-denorm: 相機座標系的道路平面方程式。可透過把雷達放在道路上，經過一次校正，取得雷達到相機的外參(即相機到道路平面的外參)，之後即可計算denorm。
-
-
-## 相機內參
-約90張棋盤格
-```
-Camera Matrix:
- [1804.85904, 0, 1028.16764],
- [0, 1801.73036, 776.526745],
- [0, 0, 1]
-
-Distortion Coefficients:
- [[-1.92291452e-01  1.14853550e-01  1.44517360e-04 -9.37258777e-04
-  1.19785944e-01]]
-```
 ## Radar Connection
 設定雷達連線
 ```bash
@@ -29,34 +13,13 @@ sudo ip route replace default via 10.13.1.1 dev radarConnection
 sudo ip route del default
 ```
 
-## Rosbag 轉出 pcd 跟 png
-- Tools_RosBag2KITTI: https://github.com/leofansq/Tools_RosBag2KITTI \
-
-在 ROS 環境中
-```bash
-cd catkin_ws
+## Build ros environment
+```
+cd ars548_ros
 catkin_make
+source devel/setup.bash
 ```
-Decode ROSBAG to .png and .pcd, the results are saved in output.
-```bash
-# 1st terminal for ROS core
-roscore
-# 2nd terminal for decoding node
-./devel/lib/obstacle_detection/map_generate
-# 3rd terminal for ROSBAG playing, 0.1 means 0.1 times speed
-rosbag play xxx.bag -r 0.1
-```
-> The actual play speed of ROSBAG is determined by the IO performance. Please adjust the speed to ensure the timestamps are within +/- 50 ms.
-
-
-## 相機雷達校正 Calibration
-- 目前是用 SensorsCalibration: https://github.com/PJLab-ADG/SensorsCalibration \
-
-因為我們是用4D雷達，點雲有xyz，所以要用lidar2camera，不能用radar2camera。\
-校正的時候盡量不要點到fx, fy。
-
-
-## BEVHeight
+## Build BEVHeight
 因為要在ROS中用它，所以要重新建環境，不能用docker。\
 https://github.com/ADLab-AutoDrive/BEVHeight \
 a. Install pytorch(v1.9.0).\
@@ -109,6 +72,104 @@ python setup.py develop
   ```
   pip install mmengine
   ```
+  
+最後
+```
+python ars548_ros/src/ars548_driver/scripts/src/BEVHeight_radar/setup.py develop
+```
+
+## 資料錄製
+第一個Terminal:
+```
+roscore
+```
+第二個Terminal:
+```
+roslaunch ars548_driver record.launch
+```
+第三個Terminal: 錄製成rosbag格式
+```
+rosbag record --duration 30 /aravis_cam/image_color/comporessed /radar/detection_list /radar/direction_velocity /radar/object_list /radar/point_cloud_detection /radar/point_cloud_object /radar/status
+```
+可用參數：詳見 https://wiki.ros.org/rosbag/Commandline#record
+
+## 播放rosbag
+第一個Terminal:
+```
+roscore
+```
+第二個Terminal:
+```
+roslaunch ars548_driver replay.launch
+```
+第三個Terminal:
+```
+rosbag play (your_bag_name)
+```
+
+## 使用多模態3D物件偵測
+第一個Terminal:
+```
+roscore
+```
+第二個Terminal:
+```
+roslaunch ars548_driver detection.launch
+```
+第三個Terminal:
+```
+rosbag play (your_bag_name)
+```
+
+***
+***
+***
+
+## 資料集
+denorm: 相機座標系的道路平面方程式。可透過把雷達放在道路上，經過一次校正，取得雷達到相機的外參(即相機到道路平面的外參)，之後即可計算denorm。
+
+
+## 相機內參
+約90張棋盤格
+```
+Camera Matrix:
+ [1804.85904, 0, 1028.16764],
+ [0, 1801.73036, 776.526745],
+ [0, 0, 1]
+
+Distortion Coefficients:
+ [[-1.92291452e-01  1.14853550e-01  1.44517360e-04 -9.37258777e-04
+  1.19785944e-01]]
+```
+
+## Rosbag 轉出 pcd 跟 png
+- Tools_RosBag2KITTI: https://github.com/leofansq/Tools_RosBag2KITTI \
+
+在 ROS 環境中
+```bash
+cd catkin_ws
+catkin_make
+```
+Decode ROSBAG to .png and .pcd, the results are saved in output.
+```bash
+# 1st terminal for ROS core
+roscore
+# 2nd terminal for decoding node
+./devel/lib/obstacle_detection/map_generate
+# 3rd terminal for ROSBAG playing, 0.1 means 0.1 times speed
+rosbag play xxx.bag -r 0.1
+```
+> The actual play speed of ROSBAG is determined by the IO performance. Please adjust the speed to ensure the timestamps are within +/- 50 ms.
+
+
+## 相機雷達校正 Calibration
+- 目前是用 SensorsCalibration: https://github.com/PJLab-ADG/SensorsCalibration \
+
+因為我們是用4D雷達，點雲有xyz，所以要用lidar2camera，不能用radar2camera。\
+校正的時候盡量不要點到fx, fy。
+
+
+
 
 
 \
