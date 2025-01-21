@@ -302,12 +302,11 @@ class LidarToImageProjection:
             
 
             if effective_range == True:
-                speed = math.sqrt(pow(obj.f_dynamics_absvel_x, 2)+pow(obj.f_dynamics_absvel_y,2))
+                speed = math.sqrt(pow(vx, 2)+pow(vy,2)) # 這個speed單位是m/s
                 radar_point_object.append([x, y, z, vx, vy, id])
 
-                if speed > 5:
+                if speed > 2:
                     radar_point_filter.append([x, y, z, vx, vy, id])
-
                     # 把資訊印在rviz
                     width = obj.u_shape_width_edge_mean
                     length = obj.u_shape_length_edge_mean

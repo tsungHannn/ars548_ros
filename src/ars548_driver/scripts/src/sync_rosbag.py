@@ -3,8 +3,8 @@ from rospy import Time
 import os
 
 
-input_bag = '/HDD/ncsist/0919/7.bag'  # 输入rosbag文件路径
-output_bag = '/HDD/ncsist/0919/sync_7.bag'  # 输出对齐后的rosbag文件路径
+input_bag = '/HDD/ncsist/0919/4.bag'  # 输入rosbag文件路径
+output_bag = '/HDD/ncsist/0919/sync_4.bag'  # 输出对齐后的rosbag文件路径
 
 # 读取rosbag并对齐时间戳
 def align_timestamps(input_bag_path, output_bag_path):

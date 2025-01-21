@@ -15,11 +15,14 @@ import message_filters
 from visualize_detect import *
 # from tracker import get_2d_bounding_box
 from mySort import Sort, draw_boxes, get_2d_bounding_box
+from traffic_analysis import TrafficAnalyzer
 
 from visualization_msgs.msg import MarkerArray, Marker
 from std_msgs.msg import Header, ColorRGBA
 from geometry_msgs.msg import Pose, Point, Vector3, Quaternion
+from pynput import keyboard
 
+from collections import deque
 import time
 # import collections
 # import threading
@@ -27,14 +30,18 @@ import time
 # range_config 有 r50_102 跟 r50_140 兩種
 range_config = "r50_102"
 
-tracking_class = {  "car": 0, 
-                    "van": 0, 
-                    "truck": 1, 
-                    "bus": 1, 
-                    "pedestrian": 2, 
-                    "bicycle": 3, 
-                    "trailer": 3, 
-                    "motorcycle": 3}
+# tracking_class = {  "car": 0, 
+#                     "van": 0, 
+#                     "truck": 1, 
+#                     "bus": 1, 
+#                     "pedestrian": 2, 
+#                     "bicycle": 3, 
+#                     "trailer": 3, 
+#                     "motorcycle": 3}
+tracking_class = {"Car":0,
+                  "Bus":1,
+                  "Pedestrian":2,
+                  "Cyclist":3}
 tracking_class_name = ["Car", "Bus", "Pedestrian", "Cyclist"]
 
 # BEVHeight radar
@@ -63,7 +70,7 @@ class BEVHeight_Radar_Ros_Inference:
         # print("cam_info", self.cam_info)
 
         self.mats_dict, cal_denorm = get_mats_dict(self.cam_info['cam_infos'], self.ida_aug_conf)
-        print(self.mats_dict)
+        # print(self.mats_dict)
 
         # self.batch_mats_dict = {}
         # for key, value in self.mats_dict.items():
@@ -104,26 +111,78 @@ class BEVHeight_Radar_Ros_Inference:
         self.marker_pub = rospy.Publisher('detected_object_marker', MarkerArray, queue_size=10)
         self.radar_hz_pub = rospy.Publisher('/radar_hz', String, queue_size=1)
         self.camera_hz_pub = rospy.Publisher('/camera_hz', String, queue_size=1)
-        
+        self.testRadar = rospy.Publisher('/testRadar', PointCloud2, queue_size=1)   # 測試
         #.... Initialize SORT .... 
         #......................... 
-        sort_max_age = 5
-        sort_min_hits = 2
-        sort_iou_thresh = 0.2
+        sort_max_age = 10 # 保留幾幀
+        sort_min_hits = 2 # 至少要幾幀有偵測到才算
+        sort_iou_thresh = 0.15 # iou的重疊範圍
         self.sort_tracker = Sort(max_age=sort_max_age,
                         min_hits=sort_min_hits,
                         iou_threshold=sort_iou_thresh)
         #......................... 
 
+        # 
+        self.analyzer = TrafficAnalyzer()
+        self.analyzer.reset()
+
+
+        # # sliding window 統計的參數
+        # self.sliding_window_size = 20
+        # self.detecting_sliding_window = deque(maxlen=self.sliding_window_size)
+        # self.sliding_result = []
+        # self.detecting_bounding_box_2d = list() # 為了輸出成每個frame的偵測結果
+        # self.csv_file_path = '/john/traffic_analysis/stats.csv'
+        # with open(self.csv_file_path, mode='w', newline='') as file:
+        #     writer = csv.writer(file)
+        #     # 写入表头，例如: frame_id, traffic flow, speed, occupancy ratio
+        #     writer.writerow(['Start_id', 'End_id', 'Flow', 'Speed(km/h)', 'Occupancy_Ratio(%)', 'Congestion_Level'])
+
+
         self.rgb_sub = message_filters.Subscriber('/aravis_cam/image_color_row', Image)
         self.radar_sub = message_filters.Subscriber('/radar_object', PointCloud2)
-        self.sync = message_filters.ApproximateTimeSynchronizer([self.rgb_sub, self.radar_sub], queue_size=1, slop=0.1)
+        self.sync = message_filters.ApproximateTimeSynchronizer([self.rgb_sub, self.radar_sub], queue_size=1, slop=0.1, reset=True)
         self.sync.registerCallback(self.syncCallback)
         
         print("###"*10)
+        print("Weight root:", model_path)
         print("BEVHeight Radar READY")
+        # 启动监听键盘按键的线程
+        # self.start_key_listener()
         rospy.spin()
-    
+
+
+
+
+    def refresh_cam_info(self):
+        """刷新cam_info数据"""
+        self.cam_info = get_cam_info("/john/ncsist/ars548_ros/src/ars548_driver/weights")
+        print("cam_info refreshed:", self.cam_info)
+
+        # 更新相关矩阵
+        self.mats_dict, cal_denorm = get_mats_dict(self.cam_info['cam_infos'], self.ida_aug_conf)
+        print("Updated mats_dict:", self.mats_dict)
+        self.camera_intrinsic = self.cam_info['cam_infos']['CAM_FRONT']['calibrated_sensor']['camera_intrinsic']
+        self.denorm = self.cam_info['cam_infos']['CAM_FRONT']['denorm']
+        for key, value in self.mats_dict.items():
+            self.mats_dict[key] = value.cuda()
+
+    def on_press(self, key):
+        """键盘按键事件处理"""
+        try:
+            if key.char == 'r':  # 按下'r'键时刷新cam_info
+                print("Refreshing cam_info...")
+                self.refresh_cam_info()
+        except AttributeError:
+            pass  # 忽略特殊键
+
+    def start_key_listener(self):
+        """开启键盘监听器"""
+        listener = keyboard.Listener(on_press=self.on_press)
+        listener.start()  # 启动监听
+
+
+
 
     def transform_radar_pv(self, points, resize, resize_dims, crop, flip, rotate, radar_idx):
         # points = points[points[:, 2] < self.max_distance_pv, :]
@@ -234,11 +293,12 @@ class BEVHeight_Radar_Ros_Inference:
             # start_time = time.time()
             # Camera
             cv_image = self.bridge.imgmsg_to_cv2(imgData, 'bgr8')
+            cv2.imwrite("/john/traffic_analysis/img/"+str(self.frame_id)+".png", cv_image)
 
             # pil_image = PILImage.fromarray(cv2.cvtColor(cv_image, cv2.COLOR_BGR2RGB))
             pil_image = cv_image[:, :, (2,1,0)]
             resize, resize_dims, crop, flip, rotate_ida = self.sample_ida_augmentation()
-
+            detecting_result = {"identities": [], "id": self.frame_id, "radarData":None}
             # first_time = time.time()
             # 這部分耗費最多時間
             # input_tensor = self.preprocess_image(
@@ -260,8 +320,12 @@ class BEVHeight_Radar_Ros_Inference:
             # second_time = time.time()
 
             # Radar
-            pc_data = pc2.read_points(radarData, field_names=("x", "y", "z", "vx", "vy"), skip_nans=True)
-        
+
+            pc_data = pc2.read_points(radarData, field_names=("x", "y", "z", "vx", "vy", "id"), skip_nans=True)
+            average_speed = self.analyzer.calculate_radar_points_averages(radarData)
+            detecting_result["radarData"]=radarData
+
+
             radar_points = list()
             sweep_radar_points = list()
 
@@ -274,6 +338,9 @@ class BEVHeight_Radar_Ros_Inference:
             np_dummy = []
 
             for point in pc_data:
+                speed = math.sqrt(pow(point[3], 2) + pow(point[4], 2))
+                # if speed > 5:
+                    # print("NewID", point[5], "speed:", speed)
                 np_x.append(point[0])
                 np_y.append(point[1])
                 np_z.append(point[2])
@@ -311,11 +378,21 @@ class BEVHeight_Radar_Ros_Inference:
 
             # forth_time = time.time()
 
+
+
+
             # 這部分最久
             with torch.no_grad():
                 output = self.model(input_tensor, self.mats_dict, final_radar_points)
-                self.process_output(output, cv_image)
+                self.process_output(output, cv_image, detecting_result)
             
+
+            
+
+
+
+
+
             # end_time = time.time()
             # print("Execution time:\t{:.6f} sec".format(end_time - start_time))
             # print("First time:\t{:.6f} sec".format(first_time-start_time))
@@ -390,7 +467,7 @@ class BEVHeight_Radar_Ros_Inference:
         return torch.stack(imgs_batch)
     
     # def process_output(self):
-    def process_output(self, output, image):
+    def process_output(self, output, image, detecting_result):
         # print(len(self.output_buffer))
         # while True:
             # if (len(self.output_buffer) > 0):
@@ -451,7 +528,7 @@ class BEVHeight_Radar_Ros_Inference:
             camera_intrinsic = np.concatenate([camera_intrinsic, np.zeros((camera_intrinsic.shape[0], 1))], axis=1)
             preds = result_files['img_bbox']
             pred_lines = []
-            tracking_list = np.empty((0,6))
+            detecting_list = np.empty((0,6))
 
             marker_array = MarkerArray()
             marker_array.markers.append(Marker(
@@ -501,8 +578,8 @@ class BEVHeight_Radar_Ros_Inference:
                     # image = cv2.rectangle(image, (int(box2d[0]), int(box2d[1])), (int(box2d[2]), int(box2d[3])), (255, 255, 255), 2) # 畫2D框
                     # Car 0 0 1.6138 619.1764 366.0287 722.9627 465.0574 1.1012 1.81 4.2636 -5.9165 -1.9003 44.1509 4.6289 0.7451                
 
-                    COLOR_LIST = {'car':ColorRGBA(r=0.0, g=0.0, b=1.0, a=1.0),
-                                'motorcycle':ColorRGBA(r=0.0, g=1.0, b=0.0, a=1.0),
+                    COLOR_LIST = {'car':ColorRGBA(r=0.0, g=1.0, b=0.0, a=1.0),
+                                'motorcycle':ColorRGBA(r=1.0, g=0.0, b=0.0, a=1.0),
                                 'bus':ColorRGBA(r=0.0, g=1.0, b=1.0, a=1.0),
                                 'truck':ColorRGBA(r=1.0, g=0.0, b=1.0, a=1.0)
                                 }
@@ -561,6 +638,7 @@ class BEVHeight_Radar_Ros_Inference:
             self.marker_pub.publish(marker_array)
 
             
+            # self.detecting_bounding_box_2d.clear()
 
             color_map = {"Car":(0, 255, 0), "Bus":(0, 255, 255), "Pedestrian":(255, 255, 0), "Cyclist":(0, 0, 255)}
             for line in pred_lines:
@@ -585,37 +663,80 @@ class BEVHeight_Radar_Ros_Inference:
                 box_2d = project_to_image(box_3d, P2)   # 2D平面上的8個點，跟預測的2D框不一樣
                 x1, y1, x2, y2 = get_2d_bounding_box(box_2d)
 
-                tracking_list = np.vstack((tracking_list, np.array([int(x1), int(y1), int(x2), int(y2), detection_score, tracking_class[class_name]])))
+                detecting_list = np.vstack((detecting_list, np.array([int(x1), int(y1), int(x2), int(y2), detection_score, tracking_class[object_type]])))
                 image = draw_box_3d(image, box_2d, c=color_map[object_type])
+                # self.detecting_bounding_box_2d.append(box_2d)
             
-            results_path = os.path.join("/john/ncsist/ars548_ros/")
+
+            # print("--------------------------------")
+            # print(self.detecting_bounding_box_2d)
+            # print("------------------------------------")
+            # print()
+            # 寫入交通分析的csv
+            # with open("/john/traffic_analysis/det/"+str(self.frame_id)+".csv", 'w') as detFile:
+                
+            #     for i in range(len(self.detecting_bounding_box_2d)):
+            #         bbox = self.detecting_bounding_box_2d[i]
+            #         for j in range(8):
+            #             # print(self.detecting_bounding_box_2d[i][j][0], self.detecting_bounding_box_2d[i][j][1])
+            #             if j < 7:
+            #                 detFile.write(f"{int(bbox[j][0])},{int(bbox[j][1])},")
+            #             elif j == 7:
+            #                 detFile.write(f"{int(bbox[j][0])},{int(bbox[j][1])}\n")
+
+                # detFile.write(self.detecting_bounding_box_2d)
+
+
+
+
+
+            # results_path = os.path.join("/john/ncsist/ars548_ros/")
 
             # cv2.imwrite(filename=os.path.join(results_path, "det_png", "cal6_{:06d}".format(self.frame_id)+".jpg"), img=image)
             # cv2.imwrite(filename=os.path.join(results_path, "original_png", "cal6_{:06d}".format(self.frame_id)+".jpg"), img=original_img)
             # write_kitti_in_txt(pred_lines, os.path.join(results_path, "det_txt", "cal6_{:06d}".format(self.frame_id) + ".txt"))
 
-
             # Run SORT
-            if len(tracking_list):
-                tracked_dets = self.sort_tracker.update(tracking_list)
+            if len(detecting_list):
+                tracked_dets = self.sort_tracker.update(detecting_list)
                 tracks = self.sort_tracker.getTrackers()
 
-                for track in tracks:
-                    if len(tracked_dets)>0:
-                        bbox_xyxy = tracked_dets[:,:4]
-                        identities = tracked_dets[:, 8]
-                        categories = tracked_dets[:, 4]
-                        
-                        image = draw_boxes(image, bbox_xyxy, identities, categories, tracking_class_name, save_with_object_id=False)
+
+                if len(tracked_dets)>0:
+                    bbox_xyxy = tracked_dets[:,:4]
+                    identities = tracked_dets[:, 8]
+                    categories = tracked_dets[:, 4]
+
+                    image = draw_boxes(image, bbox_xyxy, identities, categories, tracking_class_name, save_with_object_id=False)
+
+                    detecting_result["identities"] = identities
+
+                    self.analyzer.record_vehicle(identities)
             else:
                 tracked_dets = self.sort_tracker.update()
 
+            self.analyzer.analyze_traffic_time_interval()
+
+            
+            # self.detecting_sliding_window.append(detecting_result)
+
+            # # 用Sliding window進行統計
+            # if len(self.detecting_sliding_window) >= 20:
+            #     self.analyzer.reset()
+            #     for sliding_index in range(20):
+            #         self.analyzer.calculate_radar_points_averages(self.detecting_sliding_window[sliding_index]['radarData'])
+            #         self.analyzer.record_vehicle(self.detecting_sliding_window[sliding_index]['identities'])
+
+            #     flow, speed, congestion_level = self.analyzer.analyze_traffic_with_frames()
+
+
+            #     with open(self.csv_file_path, mode='a') as csvfile:
+            #         csvfile.write(f"{self.detecting_sliding_window[0]['id']}, {self.detecting_sliding_window[-1]['id']}, {flow}, {speed:.2f}, {congestion_level}\n")
+            
 
 
             self.frame_id += 1  
-
             image_message = self.bridge.cv2_to_imgmsg(image, "bgr8")
-
             self.image_pub.publish(image_message)
 
 # BEVHeight radar
@@ -932,6 +1053,6 @@ if __name__ == '__main__':
     # else:
     #     print("Error: range_config not found.")
 
-    radar_model_path = '/john/ncsist/ars548_ros/src/ars548_driver/weights/after_adjusting.ckpt' # BEVHeight radar
+    radar_model_path = '/john/ncsist/ars548_ros/src/ars548_driver/weights/after_adjusting_3bags.ckpt' # BEVHeight radar
 
     BEVHeight_Radar_Ros_Inference(radar_model_path, backbone_conf, backbone_pts_conf, head_conf, img_conf, ida_aug_conf, rda_aug_conf)
