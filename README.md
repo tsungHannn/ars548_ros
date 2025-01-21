@@ -1,37 +1,8 @@
 # ARS548
 
-# 產生訓練資料
-## 標注
-1. 用TOOLS_ROSBAG2KITTI把Rosbag轉成png及pcd。其中，雷達資料分成：\
-    object: 雷達處理過的物件資料\
-    filter: 只留下速度大於1的object\
-    detection: 雷達原始點雲資料
-2. 用雷達的filter進行標注: label_filter.py。會對每個點產生一個物件框
-3. 手動調整每個物件框的類別
-4. modify_scale_by_obj_type.py：依據每個type，產生固定大小的物件框
-
-
-
 ## 資料集
+denorm: 相機座標系的道路平面方程式。可透過把雷達放在道路上，經過一次校正，取得雷達到相機的外參(即相機到道路平面的外參)，之後即可計算denorm。
 
-1. rope_calib.py：產生calib，裡面是內參
-2. rope_denorm.py：產生denorm，裡面是用外參算的道路方程式
-3. rope2kitti.py：讀取myRope3d，產生myrope3d-kitti
-4. sustech2kitti.py：把標注資料的座標系轉成kitti座標系，把格式也換成kitti\
-   **然後把拿到的label資料直接放進myrope3d-kitti**\
-   感覺沒辦法產生正確的Rope3D標注資料，只能產生kitti的
-6. 之後就照著BEVHeight的kitti資料格式，就可以用BEVHeight裡面的visual_tools.py可視化標注結果
-    ```
-    myrope3d-kiiti
-    | -- training
-    |       | -- calib
-    |       | -- denorm
-    |       | -- image_2
-    |       | -- label_2
-    ```
-    ```bash
-    python scripts/data_converter/visual_tools.py --data_root /john/ncsist/test_annotation/myrope3d-kitti/ --demo_dir /john/ncsist/test_annotation/demo
-    ```
 
 # 相機內參
 約90張棋盤格
@@ -57,27 +28,6 @@ sudo ip route replace default via 10.13.1.1 dev radarConnection
 ```bash
 sudo ip route del default
 ```
-## 試用 FusionCalib 的結果
-- https://github.com/RadarCameraFusionTeam-BUPT/FusionCalib \
-
-eps=100000000\
-R = [[ 0.59158081 -0.75655654 -0.27866529]\
- [-0.64528238 -0.65151045  0.39892955]\
- [-0.4833661  -0.05618127 -0.87361369]]\
-T = [  0.          0.        117.9012079]
-
-eps=100000\
-R = [[ 0.4983728  -0.82342314 -0.27129115]\
- [-0.66009116 -0.56326378  0.4970046 ]\
- [-0.56205357 -0.06861668 -0.82424968]]\
-T = [  0.           0.         117.28140802]
-
-
-這次不知道是什麼東東\
-r = [[0.48138013257574797, 0.8740446835791055, 0.06571954860204904],\
-[0.2906559117675672, -0.2299149081132883, 0.9287939900655163],\
-[0.8269173531350938, -0.4280011987534289, -0.36472272337993766]]\
-t = [0.0, 0.0, 388232.0443589092]
 
 ## Rosbag 轉出 pcd 跟 png
 - Tools_RosBag2KITTI: https://github.com/leofansq/Tools_RosBag2KITTI \
@@ -98,24 +48,6 @@ rosbag play xxx.bag -r 0.1
 ```
 > The actual play speed of ROSBAG is determined by the IO performance. Please adjust the speed to ensure the timestamps are within +/- 50 ms.
 
-## Annotation
-- SUSTechPOINTS: https://github.com/naurril/SUSTechPOINTS \
-```bash
-cd Docker
-# Build docker image (构建镜像)
-
-sudo docker build -t sustechpoints:v1.0.0 .
-
-# Create container of server ,Please replace ${YourDataPath} with the path where you put data on (创建容器, 请将用你的数据存储路径将变量${YourDataPath}替换, 注意数据要符合data/example中的组织方式)
-
-sudo docker run -it -d --restart=always --name STPointsSServer -p 8081:8081 -v ${YourDataPath}:/root/SUSTechPOINTS/data sustechpoints:v1.0.0 bash
-
-```
-然後網頁打開 [localhost:8081](http://localhost:8081/)\
-docker可以 attach 來看
-```bash
-docker attach ${Container_name}
-```
 
 ## 相機雷達校正 Calibration
 - 目前是用 SensorsCalibration: https://github.com/PJLab-ADG/SensorsCalibration \
@@ -173,7 +105,10 @@ python setup.py develop
   ```
   pip install mmsegmentation==0.20.1
   ```
-- 可能還要裝mmengine，有點忘記了，到時候再說。
+- 可能還要裝mmengine
+  ```
+  pip install mmengine
+  ```
 
 
 \
