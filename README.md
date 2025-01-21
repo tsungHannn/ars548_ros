@@ -77,6 +77,7 @@ python setup.py develop
 ```
 python ars548_ros/src/ars548_driver/scripts/src/BEVHeight_radar/setup.py develop
 ```
+[Weight下載](https://mailntustedutw-my.sharepoint.com/:u:/g/personal/m11215120_ms_ntust_edu_tw/EfuSXaH-dKVOvtgZQ58bm7kBPrG3F39jfE42-5mvf-PuIg?e=qJKiin)
 
 ## 資料錄製
 第一個Terminal:
