@@ -317,8 +317,8 @@ class LidarToImageProjection:
                         type=Marker.TEXT_VIEW_FACING,
                         action=Marker.ADD,
                         # text=f"id: {obj.u_id} cls: {obj.classT}\n{dist:.2f}m\n{speed*3.6:.2f}km/h\n{obj.vrelX:.2f} {obj.vrelY:.2f}",
-                        # text=f"id: {obj.u_id}\n WxL:{width:.2f}x{length:.2f}m\n{speed*3.6:.2f}km/h\nClass:{classification[max_index]}",
-                        text=f"dist: {dist:.2f}\nelevation_angle: {elevation_angle:.2f}\n{speed*3.6:.2f}km/h\nClass:{classification[max_index]}",
+                        text=f"id: {obj.u_id}\nWxL:{width:.2f}x{length:.2f}m\nSpeed:{speed*3.6:.2f}km/h\nClass:{classification[max_index]}\nDist:{dist:.2f}\nHeight:{z:.2f}m\nElevation_angle: {elevation_angle:.2f}",
+                        # text=f"dist: {dist:.2f}\nelevation_angle: {elevation_angle:.2f}\n{speed*3.6:.2f}km/h\nClass:{classification[max_index]}",
                         # text=f"x:{obj.u_position_x}\ny:{obj.u_position_y}\nz:{obj.u_position_z}",
                         pose=Pose(
                             position=Point(x=obj.u_position_x, y=obj.u_position_y, z=obj.u_position_z),
